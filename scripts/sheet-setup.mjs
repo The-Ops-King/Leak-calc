@@ -8,7 +8,7 @@
  * Reads GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY and GOOGLE_SHEET_ID
  * from the environment. Nothing is written to disk and no key is logged.
  */
-import { COLUMNS, appendRows, getAccessToken, sheetsConfigured } from '../lib/sheets.js'
+import { COLUMNS, appendRows, getAccessToken, sheetsConfigured, googleAuthMode } from '../lib/sheets.js'
 
 const VERIFY = process.argv.includes('--verify')
 const SHEET = process.env.GOOGLE_SHEET_ID
@@ -18,10 +18,13 @@ const RANGE = process.env.GOOGLE_SHEET_RANGE || ''
 const NAMED_TAB = RANGE.includes('!') ? RANGE.split('!')[0].replace(/^'|'$/g, '') : null
 
 if (!sheetsConfigured()) {
-  console.error('Set these first:')
-  console.error('  export GOOGLE_SERVICE_ACCOUNT_EMAIL=leak-calc@your-project.iam.gserviceaccount.com')
-  console.error('  export GOOGLE_PRIVATE_KEY="$(cat key.json | jq -r .private_key)"')
-  console.error('  export GOOGLE_SHEET_ID=...            # the long id in the sheet URL')
+  console.error('Set GOOGLE_SHEET_ID plus one set of credentials.\n')
+  console.error('  export GOOGLE_SHEET_ID=...     # the long id in the sheet URL\n')
+  console.error('Service account:')
+  console.error('  export GOOGLE_SERVICE_ACCOUNT_EMAIL=automation@your-project.iam.gserviceaccount.com')
+  console.error('  export GOOGLE_PRIVATE_KEY="$(jq -r .private_key key.json)"\n')
+  console.error('Or OAuth (npm run google:auth mints the refresh token):')
+  console.error('  export GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... GOOGLE_OAUTH_REFRESH_TOKEN=...')
   process.exit(1)
 }
 
@@ -38,7 +41,9 @@ async function api(path, init = {}) {
 }
 
 async function main() {
-  console.log(`Service account: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`)
+  const mode = googleAuthMode()
+  console.log(`Auth mode:       ${mode}`)
+  if (mode === 'service_account') console.log(`Service account: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`)
   console.log(`Sheet:           ${SHEET}`)
 
   const meta = await api('')
@@ -46,7 +51,11 @@ async function main() {
     console.error(`Cannot open the sheet (HTTP ${meta.status}).`)
     console.error(JSON.stringify(meta.json, null, 2).slice(0, 600))
     if (meta.status === 403) {
-      console.error(`\nShare the sheet with ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL} as an Editor.`)
+      console.error(
+        mode === 'service_account'
+          ? `\nShare the sheet with ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL} as an Editor. Project IAM roles do not grant access to Drive files; sharing does.`
+          : '\nThe signed-in account cannot edit this sheet, or the refresh token lacks the spreadsheets scope. Re-run `npm run google:auth -- --scopes sheets,drive-file`.',
+      )
     }
     if (meta.status === 404) console.error('\nCheck GOOGLE_SHEET_ID against the long id in the sheet URL.')
     process.exit(1)

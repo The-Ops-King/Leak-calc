@@ -144,13 +144,14 @@ The sheet already exists with its header row:
 
 Remaining setup:
 
-1. In Google Cloud, create a project, enable the **Google Sheets API**, create a
-   service account and download its JSON key.
-2. Share the sheet with the service account address as an **Editor**. Skipping
-   this is the usual cause of a 403.
-3. Set `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` and
-   `GOOGLE_SHEET_ID` in the Vercel project.
-4. Prove the whole path works:
+1. In Google Cloud, create a project and enable the **Google Sheets API**.
+2. Create either credential (see **Google credentials** above). For a service
+   account, skip the "grant this service account access to project" step:
+   project IAM roles do not govern Drive files, sharing does.
+3. Share the sheet with the service account address as an **Editor**, or
+   consent as an account that can already edit it.
+4. Set `GOOGLE_SHEET_ID` and the credential variables in the Vercel project.
+5. Prove the whole path works:
 
    ```bash
    export GOOGLE_SERVICE_ACCOUNT_EMAIL=... GOOGLE_SHEET_ID=...
@@ -227,9 +228,11 @@ src/components/           sliders, result, lead form
 src/theme.css             brand tokens taken from jtylerray.com
 api/submit.js             the only thing that sees the tokens
 lib/email.js              the breakdown email, the three causes, the hire-me block
-lib/sheets.js             service-account JWT and the Sheets append
+lib/google-auth.js        access tokens from either credential type
+lib/sheets.js             the Sheets append and its column order
 scripts/ghl-setup.mjs     one-off custom field creation and round trip check
-scripts/sheet-setup.mjs   tab and header creation, plus a round trip check
+scripts/google-auth.mjs   local OAuth consent, prints a refresh token
+scripts/sheet-setup.mjs   header check and a round trip against the real sheet
 scripts/test-calc.mjs     math guardrails
 scripts/test-integrations.mjs  JWT, row/header parity and email rendering
 ```

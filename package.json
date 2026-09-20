@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "ghl:setup": "node scripts/ghl-setup.mjs",
     "test": "node scripts/test-calc.mjs && node scripts/test-integrations.mjs",
-    "sheet:setup": "node scripts/sheet-setup.mjs"
+    "sheet:setup": "node scripts/sheet-setup.mjs",
+    "google:auth": "node scripts/google-auth.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

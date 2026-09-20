@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** Guardrails for the two side destinations. No network, no dependencies. */
 import { generateKeyPairSync, createVerify } from 'node:crypto'
-import { signAssertion, buildRow, COLUMNS, sheetsConfigured } from '../lib/sheets.js'
+import { buildRow, COLUMNS, sheetsConfigured } from '../lib/sheets.js'
+import { signAssertion, googleAuthMode, googleConfigured } from '../lib/google-auth.js'
 import { buildBreakdownEmail, CAUSES } from '../lib/email.js'
 import { computeLeak, confidenceToMultiplier, BANDS } from '../src/lib/calc.js'
 
@@ -33,12 +34,28 @@ for (const [shape, key] of [['raw PEM', privateKey], ['escaped newlines', privat
   truthy(`${shape}: expiry is in the future and within an hour`, claim.exp - claim.iat > 0 && claim.exp - claim.iat <= 3600)
 }
 
-// Both destinations must stay off unless fully configured, or a half-set env
-// throws on every submission.
-eq('sheets off with no env', sheetsConfigured({}), false)
-eq('sheets off with only an email', sheetsConfigured({ GOOGLE_SERVICE_ACCOUNT_EMAIL: 'a@b.c' }), false)
-eq('sheets off with a missing sheet id', sheetsConfigured({ GOOGLE_SERVICE_ACCOUNT_EMAIL: 'a@b.c', GOOGLE_PRIVATE_KEY: 'k' }), false)
-eq('sheets on when complete', sheetsConfigured({ GOOGLE_SERVICE_ACCOUNT_EMAIL: 'a@b.c', GOOGLE_PRIVATE_KEY: 'k', GOOGLE_SHEET_ID: 's' }), true)
+// Credential selection. A half-set env must resolve to no mode rather than
+// throwing on every submission, and a forced mode must not silently fall back
+// to the other credential.
+const SA = { GOOGLE_SERVICE_ACCOUNT_EMAIL: 'a@b.iam.gserviceaccount.com', GOOGLE_PRIVATE_KEY: 'k' }
+const OA = { GOOGLE_OAUTH_CLIENT_ID: 'c', GOOGLE_OAUTH_CLIENT_SECRET: 's', GOOGLE_OAUTH_REFRESH_TOKEN: 'r' }
+
+eq('no credentials means no mode', googleAuthMode({}), null)
+eq('service account alone', googleAuthMode(SA), 'service_account')
+eq('oauth alone', googleAuthMode(OA), 'oauth')
+eq('both present prefers the one that cannot expire', googleAuthMode({ ...SA, ...OA }), 'service_account')
+eq('GOOGLE_AUTH_MODE forces oauth', googleAuthMode({ ...SA, ...OA, GOOGLE_AUTH_MODE: 'oauth' }), 'oauth')
+eq('GOOGLE_AUTH_MODE forces service account', googleAuthMode({ ...SA, ...OA, GOOGLE_AUTH_MODE: 'service_account' }), 'service_account')
+eq('a forced mode never falls back', googleAuthMode({ ...OA, GOOGLE_AUTH_MODE: 'service_account' }), null)
+eq('half-set service account', googleAuthMode({ GOOGLE_SERVICE_ACCOUNT_EMAIL: 'a@b.c' }), null)
+eq('half-set oauth', googleAuthMode({ GOOGLE_OAUTH_CLIENT_ID: 'c', GOOGLE_OAUTH_CLIENT_SECRET: 's' }), null)
+eq('googleConfigured tracks the mode', [googleConfigured({}), googleConfigured(SA), googleConfigured(OA)], [false, true, true])
+
+// The sheet also needs an id, whichever credential is in play.
+eq('sheets off without an id', sheetsConfigured(SA), false)
+eq('sheets on with a service account and an id', sheetsConfigured({ ...SA, GOOGLE_SHEET_ID: 's' }), true)
+eq('sheets on with oauth and an id', sheetsConfigured({ ...OA, GOOGLE_SHEET_ID: 's' }), true)
+eq('sheets off with an id but no credentials', sheetsConfigured({ GOOGLE_SHEET_ID: 's' }), false)
 
 // A row that drifts from the header silently puts values in the wrong columns.
 const values = {

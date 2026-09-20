@@ -1,0 +1,63 @@
+{
+  "under_1_min":  1.00,
+  "1_to_5_min":   1.15,
+  "5_to_30_min":  1.45,
+  "30_to_60_min": 1.75,
+  "same_day":     2.10,
+  "next_day":     2.40,
+  "whenever":     2.75,
+
+  "close_rate_ceiling": 25,
+
+  "_comment_research_max": "Upper bound of the adjustable multiplier slider. The top value (4.91) is the Velocify figure: contacting inside 1 minute converted 391% better than at the 2 minute mark. Bands below it are scaled down from that ceiling. Nothing here is invented above a published number.",
+  "research_max": {
+    "under_1_min":  1.00,
+    "1_to_5_min":   1.60,
+    "5_to_30_min":  2.60,
+    "30_to_60_min": 3.20,
+    "same_day":     3.90,
+    "next_day":     4.40,
+    "whenever":     4.91
+  },
+
+  "bands": [
+    { "id": "under_1_min",  "label": "Under 1 minute" },
+    { "id": "1_to_5_min",   "label": "1 to 5 minutes" },
+    { "id": "5_to_30_min",  "label": "5 to 30 minutes" },
+    { "id": "30_to_60_min", "label": "30 minutes to an hour" },
+    { "id": "same_day",     "label": "Same day" },
+    { "id": "next_day",     "label": "Next day" },
+    { "id": "whenever",     "label": "Whenever someone gets to it" }
+  ],
+
+  "basis": {
+    "under_1_min":  "You are already at the top of every dataset on this. Nothing to recover.",
+    "1_to_5_min":   "Velocify found conversion falls off sharply after the first minute, so there is a little left on the table even inside five.",
+    "5_to_30_min":  "MIT/Oldroyd measured a 21x drop in qualification odds between 5 and 30 minutes. This is the front edge of that curve.",
+    "30_to_60_min": "Past 30 minutes you are on the wrong side of the MIT qualification cliff.",
+    "same_day":     "Harvard Business Review found firms answering within an hour were 7x likelier to qualify a lead than those answering in the second hour.",
+    "next_day":     "HBR measured a 42 hour average first response across 2,241 companies. Next-day replies sit in the slow half of that.",
+    "whenever":     "HBR found 23% of companies never responded at all. No fixed process puts you in that group some of the time."
+  },
+
+  "sources": [
+    {
+      "org": "Velocify",
+      "detail": "3.5 million leads analyzed. Contacting inside 1 minute converted 391% better than at the 2 minute mark."
+    },
+    {
+      "org": "MIT / Dr. James Oldroyd",
+      "detail": "15,000 leads studied. A lead contacted at 5 minutes was 21x likelier to qualify than one contacted at 30."
+    },
+    {
+      "org": "Harvard Business Review",
+      "detail": "2,241 US companies audited. Average first response took 42 hours. 23% never responded at all."
+    }
+  ],
+
+  "limits": {
+    "leads":      { "min": 1,   "max": 10000,  "default": 60 },
+    "dealValue":  { "min": 100, "max": 100000, "default": 3000 },
+    "closeRate":  { "min": 0.1, "max": 50,     "default": 5 }
+  }
+}

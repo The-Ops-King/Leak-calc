@@ -139,7 +139,10 @@ function signs a service-account JWT with `node:crypto` and calls the Sheets API
 directly: no dependency, no third party between the form and the row, nothing to
 go down or run out of tasks.
 
-Setup:
+The sheet already exists with its header row:
+<https://docs.google.com/spreadsheets/d/1SdRyBHGme5OMFkWJNwh_U5kvzFbvB_A0gmI6qKnYZgc/edit>
+
+Remaining setup:
 
 1. In Google Cloud, create a project, enable the **Google Sheets API**, create a
    service account and download its JSON key.
@@ -147,7 +150,7 @@ Setup:
    this is the usual cause of a 403.
 3. Set `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` and
    `GOOGLE_SHEET_ID` in the Vercel project.
-4. Create the tab and header row, then prove the whole path works:
+4. Prove the whole path works:
 
    ```bash
    export GOOGLE_SERVICE_ACCOUNT_EMAIL=... GOOGLE_SHEET_ID=...
@@ -158,6 +161,11 @@ Setup:
 The row is written last so it can record whether the email actually went out.
 Seventeen columns, listed in `COLUMNS` in `lib/sheets.js`. Access tokens are
 cached for the hour they are valid, so most submissions skip the token exchange.
+
+The default range is `A:Q` with no tab name, so appends go to the first sheet.
+Naming a tab in code would break the moment it is renamed, and a sheet created
+from a CSV names its tab after the file rather than anything predictable. Set
+`GOOGLE_SHEET_RANGE` if you add more tabs and want a specific one.
 
 Every submission is logged, including the ones that get no number on the page
 ("under 1 minute", or a booking rate already above the ceiling). Those are still

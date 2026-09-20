@@ -12,7 +12,10 @@ import { COLUMNS, appendRows, getAccessToken, sheetsConfigured } from '../lib/sh
 
 const VERIFY = process.argv.includes('--verify')
 const SHEET = process.env.GOOGLE_SHEET_ID
-const TAB = (process.env.GOOGLE_SHEET_RANGE || 'Submissions!A:Q').split('!')[0]
+// Only treat the range as naming a tab when it actually does. Without one the
+// API appends to the first sheet, which is what we want by default.
+const RANGE = process.env.GOOGLE_SHEET_RANGE || ''
+const NAMED_TAB = RANGE.includes('!') ? RANGE.split('!')[0].replace(/^'|'$/g, '') : null
 
 if (!sheetsConfigured()) {
   console.error('Set these first:')
@@ -37,7 +40,6 @@ async function api(path, init = {}) {
 async function main() {
   console.log(`Service account: ${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}`)
   console.log(`Sheet:           ${SHEET}`)
-  console.log(`Tab:             ${TAB}\n`)
 
   const meta = await api('')
   if (!meta.ok) {
@@ -53,17 +55,21 @@ async function main() {
 
   const tabs = (meta.json.sheets || []).map((s) => s.properties.title)
   console.log(`Tabs: ${tabs.join(', ')}`)
-  if (!tabs.includes(TAB)) {
-    console.log(`\nCreating tab "${TAB}"`)
+
+  if (NAMED_TAB && !tabs.includes(NAMED_TAB)) {
+    console.log(`\nGOOGLE_SHEET_RANGE names "${NAMED_TAB}", which does not exist. Creating it.`)
     const made = await api(':batchUpdate', {
       method: 'POST',
-      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: TAB } } }] }),
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: NAMED_TAB } } }] }),
     })
     if (!made.ok) {
       console.error(`Could not create the tab: ${JSON.stringify(made.json).slice(0, 300)}`)
       process.exit(1)
     }
   }
+
+  const TAB = NAMED_TAB || tabs[0]
+  console.log(`Writing to:      ${TAB}${NAMED_TAB ? '' : '  (first sheet, no tab named in GOOGLE_SHEET_RANGE)'}`)
 
   const existing = await api(`/values/${encodeURIComponent(`${TAB}!A1:Q1`)}`)
   const header = existing.json?.values?.[0] || []

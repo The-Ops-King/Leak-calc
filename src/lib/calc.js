@@ -3,7 +3,7 @@ import config from '../../config/multipliers.json' with { type: 'json' }
 export const BANDS = config.bands
 export const LIMITS = config.limits
 export const SOURCES = config.sources
-export const CEILING = config.close_rate_ceiling
+export const BOOKING_CEILING = config.booking_rate_ceiling
 
 export function defaultMultiplier(bandId) {
   return config[bandId]
@@ -18,15 +18,25 @@ export function basisFor(bandId) {
 }
 
 /**
- * Validates a single numeric input against config/multipliers.json limits.
- * Returns null when the value is fine, or a sentence to show the user.
+ * The slider is a confidence dial, not a multiplier dial. 100 means "the study
+ * is right"; 0 means "none of it holds". The defaults in the config sit well
+ * under half of what the research claims, which is where the dial opens.
  */
+export function confidenceToMultiplier(bandId, confidence) {
+  const max = researchMax(bandId)
+  return 1 + (max - 1) * (confidence / 100)
+}
+
+export function defaultConfidence(bandId) {
+  const max = researchMax(bandId)
+  if (max <= 1) return 0
+  return Math.round(((defaultMultiplier(bandId) - 1) / (max - 1)) * 100)
+}
+
 export function validateField(key, value) {
   const limit = LIMITS[key]
   if (!limit) return null
-  if (value === '' || value === null || value === undefined) {
-    return FIELD_MESSAGES[key].empty
-  }
+  if (value === '' || value === null || value === undefined) return FIELD_MESSAGES[key].empty
   const n = Number(value)
   if (!Number.isFinite(n)) return FIELD_MESSAGES[key].empty
   if (n < limit.min || n > limit.max) return FIELD_MESSAGES[key].range
@@ -36,65 +46,94 @@ export function validateField(key, value) {
 const FIELD_MESSAGES = {
   leads: {
     empty: 'Put a number of leads in and the math will run.',
-    range: `That is outside what this tool can read honestly. It handles ${LIMITS.leads.min} to ${LIMITS.leads.max.toLocaleString()} leads a month. Above that your economics are different enough that an average multiplier would be guessing.`,
+    range: `This tool handles ${LIMITS.leads.min} to ${LIMITS.leads.max.toLocaleString()} leads a month. Above that your economics are different enough that an average multiplier would be guessing.`,
   },
   dealValue: {
     empty: 'Put an average deal value in and the math will run.',
-    range: `This tool handles deals between $${LIMITS.dealValue.min} and $${LIMITS.dealValue.max.toLocaleString()}. Outside that range the response-time research stops being a fair comparison for your sale.`,
+    range: `This tool handles deals between $${LIMITS.dealValue.min} and $${LIMITS.dealValue.max.toLocaleString()}. Outside that the response-time research stops being a fair comparison for your sale.`,
+  },
+  bookingRate: {
+    empty: 'Put your booking rate in and the math will run.',
+    range: `A booking rate has to land between ${LIMITS.bookingRate.min}% and ${LIMITS.bookingRate.max}% of the leads you get.`,
+  },
+  showRate: {
+    empty: 'Put your show rate in and the math will run.',
+    range: `A show rate under ${LIMITS.showRate.min}% usually means something other than no-shows is going on. Check what is being counted.`,
   },
   closeRate: {
     empty: 'Put your close rate in and the math will run.',
-    range: `A lead-to-sale close rate under ${LIMITS.closeRate.min}% or over ${LIMITS.closeRate.max}% usually means the number being measured is not lead-to-sale. Check what the denominator is and try again.`,
+    range: `This is the percentage of people who show up that buy, so it has to sit between ${LIMITS.closeRate.min}% and ${LIMITS.closeRate.max}%.`,
   },
 }
 
 /**
- * The whole model. Multiplier is applied to close rate, never to revenue, and
- * the improved close rate is capped so nothing projects an absurd number.
+ * The funnel. The multiplier touches the booking rate and nothing else, because
+ * that is what the studies measure: whether you reach and qualify the lead.
+ * Show rate and close rate stay exactly where the operator put them.
  */
-export function computeLeak({ leads, dealValue, closeRate, multiplier }) {
-  const currentRevenue = leads * (closeRate / 100) * dealValue
+export function computeLeak({ leads, dealValue, bookingRate, showRate, closeRate, multiplier }) {
+  const aboveCeiling = bookingRate >= BOOKING_CEILING
+  const improvedBooking = liftBookingRate(bookingRate, multiplier)
+  const ceilingBinding = !aboveCeiling && improvedBooking >= BOOKING_CEILING - 1e-9
 
-  const uncappedCloseRate = closeRate * multiplier
+  const now = stage(leads, bookingRate, showRate, closeRate, dealValue)
+  const improved = stage(leads, improvedBooking, showRate, closeRate, dealValue)
 
-  // The ceiling stops us projecting an absurd close rate. It must never drag
-  // someone BELOW where they already are, which would print a negative leak
-  // for anyone already closing above the ceiling.
-  const aboveCeiling = closeRate >= CEILING
-  const improvedCloseRate = Math.max(closeRate, Math.min(uncappedCloseRate, CEILING))
-  const ceilingBinding = !aboveCeiling && uncappedCloseRate > CEILING
-
-  const improvedRevenue = leads * (improvedCloseRate / 100) * dealValue
-  const rawLeak = improvedRevenue - currentRevenue
-
-  // Round down to the nearest hundred, always.
+  const rawLeak = improved.revenue - now.revenue
   const leakMonthly = Math.floor(rawLeak / 100) * 100
 
-  // Annual is derived from the rounded monthly so anyone can check it with a
-  // calculator and get the same answer.
-  const leakAnnual = leakMonthly * 12
-
-  // The multiplier the user actually gets once the ceiling is applied.
-  const effectiveMultiplier = closeRate > 0 ? improvedCloseRate / closeRate : 1
-
   return {
-    currentRevenue,
-    improvedCloseRate,
-    improvedRevenue,
+    now,
+    improved,
+    improvedBooking,
     rawLeak,
     leakMonthly,
-    leakAnnual,
-    ceilingBinding,
+    // Derived from the rounded monthly so it checks out on a calculator.
+    leakAnnual: leakMonthly * 12,
     aboveCeiling,
-    effectiveMultiplier,
+    ceilingBinding,
+    effectiveMultiplier: bookingRate > 0 ? improvedBooking / bookingRate : 1,
     belowFloor: rawLeak > 0 && leakMonthly === 0,
   }
 }
 
 /**
- * Sliders run on a log scale. Leads, deal size and close rates are all
- * clustered near the bottom of their ranges, so a linear track would waste
- * most of the thumb travel on values nobody has.
+ * The lift is an odds ratio, not a rate multiplier, because that is what the
+ * research actually says. "21x more likely to qualify" is a statement about
+ * odds, and odds are what you can legitimately multiply.
+ *
+ * Multiplying the rate itself breaks at both ends: it sends a 50% booker past
+ * 100%, and it pins everyone to the cap so the confidence dial goes dead.
+ * Closing the gap to the cap instead breaks at the bottom, promoting a 1%
+ * booker to 64%. The odds transform behaves at both: near-multiplicative when
+ * the rate is low, naturally saturating when it is high.
+ */
+export function liftBookingRate(bookingRate, multiplier) {
+  if (bookingRate >= BOOKING_CEILING || multiplier <= 1) return bookingRate
+  const odds = bookingRate / (100 - bookingRate)
+  const lifted = odds * multiplier
+  return Math.min((lifted / (1 + lifted)) * 100, BOOKING_CEILING)
+}
+
+function stage(leads, bookingRate, showRate, closeRate, dealValue) {
+  const booked = leads * (bookingRate / 100)
+  const showed = booked * (showRate / 100)
+  const sold = showed * (closeRate / 100)
+  return {
+    leads,
+    booked,
+    showed,
+    sold,
+    revenue: sold * dealValue,
+    bookingRate,
+    // What the whole funnel comes out to, lead to sale.
+    leadToSale: (bookingRate / 100) * (showRate / 100) * (closeRate / 100) * 100,
+  }
+}
+
+/**
+ * Sliders run on a log scale. Leads and deal sizes cluster near the bottom of
+ * their ranges, so a linear track wastes most of the thumb travel.
  */
 export function posToValue(pos, { min, max }, round) {
   const raw = Math.exp(Math.log(min) + (pos / 1000) * (Math.log(max) - Math.log(min)))
@@ -106,16 +145,17 @@ export function valueToPos(value, { min, max }) {
   return ((Math.log(clamped) - Math.log(min)) / (Math.log(max) - Math.log(min))) * 1000
 }
 
+const pctRounder = (n, min, max) => clamp(Math.round(n / (n < 10 ? 0.5 : 1)) * (n < 10 ? 0.5 : 1), min, max)
+
 export const ROUNDERS = {
   leads: (n, min, max) => clamp(Math.round(n), min, max),
   dealValue: (n, min, max) => {
     const step = n < 1000 ? 50 : n < 10000 ? 100 : 500
     return clamp(Math.round(n / step) * step, min, max)
   },
-  closeRate: (n, min, max) => {
-    const step = n < 1 ? 0.1 : n < 10 ? 0.25 : 1
-    return clamp(Math.round(n / step) * step, min, max)
-  },
+  bookingRate: pctRounder,
+  showRate: pctRounder,
+  closeRate: pctRounder,
 }
 
 function clamp(n, min, max) {

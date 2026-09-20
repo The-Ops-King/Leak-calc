@@ -1,10 +1,12 @@
 # Lead Leak Calculator
 
-A one page calculator for `leak.jtylerray.com`. A business owner sets four
-numbers, sees what their lead response time costs them per month, sees the math
+A one page calculator for `leak.jtylerray.com`. A business owner sets their
+funnel, sees what their lead response time costs them per month, sees the math
 that produced it, and can hand over an email to get the breakdown. The email
-creates a tagged contact in HighLevel with their lead volume, deal size and
-close rate attached.
+creates a tagged contact in HighLevel with their whole funnel attached.
+
+The funnel is leads, then booking rate, then show rate, then close rate on
+shows. Revenue is `leads x booking x show x close x deal value`.
 
 ## Why the number is believable
 
@@ -12,17 +14,27 @@ The published research measures contact and qualification rates, not revenue.
 Multiplying revenue by 21 produces a figure a skeptical operator dismisses on
 sight, so this tool does none of that:
 
-- The multiplier is applied to **close rate**, never to revenue.
-- The improved close rate is capped at `close_rate_ceiling` (25%). Past that the
-  tool says it will not project rather than printing a bigger number.
-- Anyone already closing above the ceiling gets no number at all and a note
+- The lift is applied to the **booking rate** and nothing else. Show rate and
+  close rate stay exactly where the operator put them, because no cited study
+  claims a rep closes better for having called sooner. They measure whether you
+  reach the lead at all.
+- The lift is an **odds ratio**, not a rate multiplier. "21x more likely to
+  qualify" is a statement about odds, and odds are what you can legitimately
+  multiply. Multiplying the rate itself sends a 50% booker past 100%; closing
+  the gap to the ceiling instead promotes a 1% booker to 64%. The odds transform
+  behaves at both ends.
+- The improved booking rate stops at `booking_rate_ceiling` (80%). Nobody books
+  more of their raw inbound leads than that.
+- Anyone already booking above the ceiling gets no number at all and a note
   explaining why.
 - "Under 1 minute" returns zero. There is no fabricated leak for someone whose
   response time is already right.
 - Every figure rounds down. The annual number is the rounded monthly times
   twelve, so anyone can check it on a calculator and get the same answer.
-- The multiplier slider starts on the conservative value and its top of track is
-  the Velocify 391% figure. The visitor can set the lift themselves.
+- The slider is a **confidence dial**, not a multiplier dial. The visitor says
+  how much of the published research they believe, and the lift follows. It
+  opens between 25% and 45% depending on the band, so the default is always well
+  under half of what the study found. Drag it to zero and the leak goes to zero.
 
 ## Running it
 
@@ -38,10 +50,15 @@ so it never looks broken while the form is loading.
 
 ## Tuning the model
 
-`config/multipliers.json` holds everything. The original seven band multipliers
-are the defaults the slider opens on; `research_max` is the top of the slider;
-`basis` is the sentence shown under it; `limits` drives both the slider ranges
-and the validation. Changing a number here needs a redeploy but no code edit.
+`config/multipliers.json` holds everything. The seven band values are the
+multipliers the confidence dial opens on; `research_max` is what the dial reaches
+at 100%; `booking_rate_ceiling` is the hard stop; `basis` is the sentence shown
+under the dial; `limits` drives both the slider ranges and the validation.
+Changing a number here needs a redeploy but no code edit.
+
+The dial position is derived, not stored: a band's default confidence is
+`(default - 1) / (research_max - 1)`. Lower a band's multiplier and the dial
+opens lower on its own.
 
 ## HighLevel setup
 
@@ -78,6 +95,13 @@ rejects the version. Override with `GHL_API_VERSION` if that ever settles.
 The docs example uses `fieldValue` while a lot of live v2 traffic uses
 `field_value`. Both keys are sent so the value cannot land empty either way.
 `npm run ghl:setup -- --verify` confirms which one stuck.
+
+### Custom fields
+
+Eight fields are created on the sub-account: `leads_per_month`, `deal_value`,
+`booking_rate`, `show_rate`, `close_rate`, `response_time_band`,
+`study_confidence` and `calculated_leak_monthly`. `close_rate` here means
+show-to-sale, not lead-to-sale.
 
 ## Rate limiting
 

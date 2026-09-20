@@ -1,9 +1,11 @@
-import { money, count, pct, liftPct } from '../lib/format'
-import { SOURCES, CEILING } from '../lib/calc'
+import { money, pct, liftPct, qty, count } from '../lib/format'
+import { SOURCES, BOOKING_CEILING } from '../lib/calc'
 
-export default function Result({ result, leads, closeRate, multiplier, isOptimal, target }) {
+export default function Result({ result, isOptimal, target }) {
   if (isOptimal) return <Optimal />
-  if (result.aboveCeiling) return <AboveCeiling closeRate={closeRate} />
+  if (result.aboveCeiling) return <AboveCeiling bookingRate={result.now.bookingRate} />
+
+  const { now, improved } = result
 
   return (
     <>
@@ -23,26 +25,51 @@ export default function Result({ result, leads, closeRate, multiplier, isOptimal
         </p>
         {result.ceilingBinding && (
           <span className="flag">
-            Capped at a {CEILING}% close rate. Dragging further stops moving the number.
+            Booking rate held at {BOOKING_CEILING}%. Nobody books more of their raw leads than that.
           </span>
         )}
       </section>
 
       <section className="card">
-        <h2>How we got there</h2>
-        <dl className="working">
-          <Row label="Leads per month" value={count(leads)} />
-          <Row label="Close rate now" value={pct(closeRate)} />
-          <Row label={`Close rate answering ${target}`} value={pct(result.improvedCloseRate)} />
-          <Row label="Lift applied" value={liftPct(result.effectiveMultiplier)} />
-        </dl>
+        <h2>Your funnel, both ways</h2>
+        <table className="funnel">
+          <thead>
+            <tr>
+              <th />
+              <th>Now</th>
+              <th className="is-improved">{target.replace('inside ', 'In ').replace(' minutes', ' min').replace(' minute', ' min')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <FunnelRow label="Leads" now={count(now.leads)} improved={count(improved.leads)} />
+            <FunnelRow
+              label={`Booked (${pct(now.bookingRate)} → ${pct(improved.bookingRate)})`}
+              now={qty(now.booked)}
+              improved={qty(improved.booked)}
+            />
+            <FunnelRow label="Showed up" now={qty(now.showed)} improved={qty(improved.showed)} />
+            <FunnelRow label="Bought" now={qty(now.sold)} improved={qty(improved.sold)} />
+            <FunnelRow
+              total
+              label="Revenue"
+              now={money(now.revenue)}
+              improved={money(improved.revenue)}
+            />
+          </tbody>
+        </table>
+
         <hr className="rule" />
+
         <p className="fine">
-          The multiplier is applied to your close rate, never to your revenue, and it stops at a{' '}
-          {CEILING}% close rate. Every figure is rounded down. The comparison is against{' '}
-          {target}.
-          {Math.abs(multiplier - result.effectiveMultiplier) > 0.01 &&
-            ' You set the lift higher than the cap allows, so the cap is what you are seeing.'}
+          Only the booking rate moves. Your show rate and your close rate stay exactly where you set
+          them, because none of the studies below claim a rep closes better for having called
+          sooner. They measure whether you reach the lead at all.
+        </p>
+        <p className="fine" style={{ marginTop: 10 }}>
+          The lift is applied to your odds of booking rather than to the rate itself, which is what
+          "21x more likely to qualify" actually means, and it stops at a {BOOKING_CEILING}% booking
+          rate. Lead to sale goes from {pct(now.leadToSale)} to {pct(improved.leadToSale)}, a{' '}
+          {liftPct(result.effectiveMultiplier)} move on bookings. Every figure is rounded down.
         </p>
       </section>
 
@@ -56,12 +83,13 @@ export default function Result({ result, leads, closeRate, multiplier, isOptimal
   )
 }
 
-function Row({ label, value }) {
+function FunnelRow({ label, now, improved, total }) {
   return (
-    <div className="working__row">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
+    <tr className={total ? 'is-total' : undefined}>
+      <td>{label}</td>
+      <td>{now}</td>
+      <td className="is-improved">{improved}</td>
+    </tr>
   )
 }
 
@@ -81,8 +109,8 @@ function Optimal() {
       <section className="card">
         <h2>So what is actually breaking?</h2>
         <p className="lede" style={{ fontSize: 16 }}>
-          When speed is already handled, the leak is usually further down: what happens on the call,
-          how many times you follow up before giving up, or who you let book in the first place.
+          When speed is already handled, the leak moves down the funnel: people booking and not
+          showing, or showing and not buying. Those are different problems with different fixes.
         </p>
         <p className="fine">
           Tell me what yours looks like and I will tell you where I would look first.
@@ -94,23 +122,23 @@ function Optimal() {
   )
 }
 
-function AboveCeiling({ closeRate }) {
+function AboveCeiling({ bookingRate }) {
   return (
     <>
       <section className="card card--accent">
         <p className="result__caption">No number for you</p>
         <p className="result__amount">&mdash;</p>
         <p className="result__annual">
-          You are closing {pct(closeRate)} of your leads. This tool refuses to project past a{' '}
-          {CEILING}% close rate, so anything it told you here would be made up.
+          You already book {pct(bookingRate)} of your leads. This tool will not project past{' '}
+          {BOOKING_CEILING}%, so anything it told you here would be made up.
         </p>
       </section>
 
       <section className="card">
         <h2>Worth a sanity check</h2>
         <p className="lede" style={{ fontSize: 16 }}>
-          A lead-to-sale rate that high usually means the number being counted is not raw inbound
-          leads. If it really is, response time is not your constraint and lead volume probably is.
+          A booking rate that high usually means the number being counted is not raw inbound leads.
+          If it really is, speed is not your constraint and lead volume probably is.
         </p>
       </section>
 

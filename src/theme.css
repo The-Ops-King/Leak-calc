@@ -432,3 +432,66 @@ a:hover { color: var(--bone); border-bottom-color: var(--bone); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+.field__value--plain {
+  border: none;
+  background: none;
+  padding-right: 0;
+  color: var(--accent-text);
+}
+
+.applied {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--grey-mid);
+}
+
+.applied b {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--bone);
+}
+
+/* ---------- funnel ---------- */
+
+.funnel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.funnel th {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--grey-dim);
+  text-align: right;
+  padding: 0 0 10px;
+  vertical-align: bottom;
+}
+
+.funnel th:first-child { text-align: left; }
+.funnel th.is-improved { color: var(--accent-text); }
+
+.funnel td {
+  padding: 11px 0;
+  border-top: 1px solid var(--hair-soft);
+  text-align: right;
+  font-family: var(--mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.funnel td:first-child {
+  text-align: left;
+  font-family: var(--sans);
+  font-weight: 300;
+  color: var(--grey-mid);
+}
+
+.funnel td.is-improved { color: var(--accent-text); }
+.funnel tr.is-total td { border-top: 1px solid var(--hair); font-size: 15px; }
+.funnel tr.is-total td:first-child { color: var(--bone); font-weight: 400; }

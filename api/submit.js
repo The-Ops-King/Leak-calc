@@ -18,15 +18,22 @@ const FALLBACK_VERSION = PRIMARY_VERSION === 'v3' ? '2021-07-28' : 'v3'
 const FIELD_NAMES = [
   'leads_per_month',
   'deal_value',
+  'booking_rate',
+  'show_rate',
   'close_rate',
   'response_time_band',
+  'study_confidence',
   'calculated_leak_monthly',
 ]
 
+// Mirrors config/multipliers.json. close_rate is show-to-sale, not lead-to-sale.
 const LIMITS = {
   leads_per_month: [1, 10000],
   deal_value: [100, 100000],
-  close_rate: [0.1, 50],
+  booking_rate: [1, 100],
+  show_rate: [10, 100],
+  close_rate: [1, 100],
+  study_confidence: [0, 100],
   calculated_leak_monthly: [0, 100000000],
 }
 

@@ -17,8 +17,11 @@ const VERIFY = process.argv.includes('--verify')
 const FIELDS = [
   { name: 'leads_per_month', dataType: 'NUMERICAL', placeholder: 'Leads per month' },
   { name: 'deal_value', dataType: 'MONETORY', placeholder: 'Average deal value' },
-  { name: 'close_rate', dataType: 'NUMERICAL', placeholder: 'Close rate %' },
+  { name: 'booking_rate', dataType: 'NUMERICAL', placeholder: 'Leads that book %' },
+  { name: 'show_rate', dataType: 'NUMERICAL', placeholder: 'Bookings that show %' },
+  { name: 'close_rate', dataType: 'NUMERICAL', placeholder: 'Shows that buy %' },
   { name: 'response_time_band', dataType: 'TEXT', placeholder: 'Response time band' },
+  { name: 'study_confidence', dataType: 'NUMERICAL', placeholder: 'Study confidence %' },
   { name: 'calculated_leak_monthly', dataType: 'MONETORY', placeholder: 'Monthly leak' },
 ]
 
@@ -102,7 +105,7 @@ async function main() {
 
   const email = `leak-calc-test+${Date.now()}@example.com`
   const customFields = Object.entries(ids).map(([name, id]) => {
-    const v = name === 'response_time_band' ? 'same_day' : '123'
+    const v = name === 'response_time_band' ? 'same_day' : '42'
     return { id, fieldValue: v, field_value: v }
   })
 

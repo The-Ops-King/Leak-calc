@@ -1,45 +1,60 @@
 {
-  "under_1_min":  1.00,
-  "1_to_5_min":   1.15,
-  "5_to_30_min":  1.45,
+  "under_1_min": 1.0,
+  "1_to_5_min": 1.15,
+  "5_to_30_min": 1.45,
   "30_to_60_min": 1.75,
-  "same_day":     2.10,
-  "next_day":     2.40,
-  "whenever":     2.75,
-
-  "close_rate_ceiling": 25,
-
-  "_comment_research_max": "Upper bound of the adjustable multiplier slider. The top value (4.91) is the Velocify figure: contacting inside 1 minute converted 391% better than at the 2 minute mark. Bands below it are scaled down from that ceiling. Nothing here is invented above a published number.",
+  "same_day": 2.1,
+  "next_day": 2.4,
+  "whenever": 2.75,
+  "_comment_research_max": "Top of the confidence slider: the full lift the research would support for that band. 4.91 is the Velocify figure (contacting inside 1 minute converted 391% better than at the 2 minute mark). The seven values above are the defaults the slider opens on, all well under these.",
   "research_max": {
-    "under_1_min":  1.00,
-    "1_to_5_min":   1.60,
-    "5_to_30_min":  2.60,
-    "30_to_60_min": 3.20,
-    "same_day":     3.90,
-    "next_day":     4.40,
-    "whenever":     4.91
+    "under_1_min": 1.0,
+    "1_to_5_min": 1.6,
+    "5_to_30_min": 2.6,
+    "30_to_60_min": 3.2,
+    "same_day": 3.9,
+    "next_day": 4.4,
+    "whenever": 4.91
   },
-
   "bands": [
-    { "id": "under_1_min",  "label": "Under 1 minute" },
-    { "id": "1_to_5_min",   "label": "1 to 5 minutes" },
-    { "id": "5_to_30_min",  "label": "5 to 30 minutes" },
-    { "id": "30_to_60_min", "label": "30 minutes to an hour" },
-    { "id": "same_day",     "label": "Same day" },
-    { "id": "next_day",     "label": "Next day" },
-    { "id": "whenever",     "label": "Whenever someone gets to it" }
+    {
+      "id": "under_1_min",
+      "label": "Under 1 minute"
+    },
+    {
+      "id": "1_to_5_min",
+      "label": "1 to 5 minutes"
+    },
+    {
+      "id": "5_to_30_min",
+      "label": "5 to 30 minutes"
+    },
+    {
+      "id": "30_to_60_min",
+      "label": "30 minutes to an hour"
+    },
+    {
+      "id": "same_day",
+      "label": "Same day"
+    },
+    {
+      "id": "next_day",
+      "label": "Next day"
+    },
+    {
+      "id": "whenever",
+      "label": "Whenever someone gets to it"
+    }
   ],
-
   "basis": {
-    "under_1_min":  "You are already at the top of every dataset on this. Nothing to recover.",
-    "1_to_5_min":   "Velocify found conversion falls off sharply after the first minute, so there is a little left on the table even inside five.",
-    "5_to_30_min":  "MIT/Oldroyd measured a 21x drop in qualification odds between 5 and 30 minutes. This is the front edge of that curve.",
+    "under_1_min": "You are already at the top of every dataset on this. Nothing to recover.",
+    "1_to_5_min": "Velocify found contact rates fall off sharply after the first minute, so a little is still on the table inside five.",
+    "5_to_30_min": "MIT/Oldroyd measured a 21x drop in the odds of qualifying a lead between 5 and 30 minutes. This is the front edge of that curve.",
     "30_to_60_min": "Past 30 minutes you are on the wrong side of the MIT qualification cliff.",
-    "same_day":     "Harvard Business Review found firms answering within an hour were 7x likelier to qualify a lead than those answering in the second hour.",
-    "next_day":     "HBR measured a 42 hour average first response across 2,241 companies. Next-day replies sit in the slow half of that.",
-    "whenever":     "HBR found 23% of companies never responded at all. No fixed process puts you in that group some of the time."
+    "same_day": "Harvard Business Review found firms answering within an hour were 7x likelier to qualify a lead than those answering in the second hour.",
+    "next_day": "HBR measured a 42 hour average first response across 2,241 companies. Next-day replies sit in the slow half of that.",
+    "whenever": "HBR found 23% of companies never responded at all. No fixed process puts you in that group some of the time."
   },
-
   "sources": [
     {
       "org": "Velocify",
@@ -54,10 +69,33 @@
       "detail": "2,241 US companies audited. Average first response took 42 hours. 23% never responded at all."
     }
   ],
-
   "limits": {
-    "leads":      { "min": 1,   "max": 10000,  "default": 60 },
-    "dealValue":  { "min": 100, "max": 100000, "default": 3000 },
-    "closeRate":  { "min": 0.1, "max": 50,     "default": 5 }
-  }
+    "leads": {
+      "min": 1,
+      "max": 10000,
+      "default": 60
+    },
+    "dealValue": {
+      "min": 100,
+      "max": 100000,
+      "default": 3000
+    },
+    "bookingRate": {
+      "min": 1,
+      "max": 100,
+      "default": 25
+    },
+    "showRate": {
+      "min": 10,
+      "max": 100,
+      "default": 60
+    },
+    "closeRate": {
+      "min": 1,
+      "max": 100,
+      "default": 35
+    }
+  },
+  "booking_rate_ceiling": 80,
+  "_comment_ceiling": "Nobody books more than 80% of raw inbound leads. The lift is applied to booking rate only, because that is what the research measures: whether you reach and qualify the lead, not how well a rep closes once they are on the call."
 }

@@ -16,3 +16,7 @@ export const mult = (n) => `${(Math.floor(n * 100) / 100).toFixed(2)}x`
 
 // "1.45x" reads as arithmetic. "+45% more sales" is what an operator hears.
 export const liftPct = (n) => `+${Math.round((n - 1) * 100)}%`
+
+// Funnel counts. One decimal while the numbers are small enough that rounding
+// would stop the column multiplying out, whole numbers once they are not.
+export const qty = (n) => (n >= 100 ? count(Math.round(n)) : (Math.round(n * 10) / 10).toFixed(1))

@@ -114,8 +114,6 @@ async function consent() {
   console.log('Scopes requested:')
   for (const s of requested) console.log(`  ${s.padEnd(14)} ${SCOPES[s]}`)
   console.log(`\nOpen this in a browser signed in as the account you want to act as:\n\n${url}\n`)
-  console.log(`Waiting on ${redirect} ...`)
-
   const code = await new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const u = new URL(req.url, redirect)

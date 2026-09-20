@@ -8,6 +8,7 @@ export default function LeadForm({ payload }) {
   const [phone, setPhone] = useState('')
   const [trap, setTrap] = useState('') // honeypot; name avoids every autofill token
   const [state, setState] = useState('idle')
+  const [emailed, setEmailed] = useState(false)
   const [error, setError] = useState('')
   const [openedAt] = useState(() => Date.now())
 
@@ -34,6 +35,7 @@ export default function LeadForm({ payload }) {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Something went wrong on our end.')
+      setEmailed(Boolean(body.emailed))
       setState('done')
     } catch (err) {
       setState('idle')
@@ -44,10 +46,11 @@ export default function LeadForm({ payload }) {
   if (state === 'done') {
     return (
       <section className="card">
-        <h2>Sent.</h2>
+        <h2>{emailed ? 'Sent.' : 'Got it.'}</h2>
         <p className="fine">
-          The breakdown is on its way to {email}. If it is not there in a few minutes, check
-          promotions.
+          {emailed
+            ? `The breakdown is on its way to ${email}. If it is not there in a few minutes, check promotions.`
+            : `Your numbers are saved against ${email} and I will be in touch with the breakdown.`}
         </p>
       </section>
     )

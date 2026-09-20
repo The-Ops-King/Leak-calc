@@ -53,24 +53,28 @@ export default function App() {
 
   const fields = [
     { id: 'leads', label: 'Leads per month', state: leads, set: setLeads, fmt: count },
-    { id: 'dealValue', label: 'Average deal value', state: dealValue, set: setDealValue, fmt: money },
+    {
+      id: 'dealValue', label: 'Average deal value', state: dealValue, set: setDealValue,
+      fmt: money, suffix: null,
+      scaleLabel: (v) => (v === LIMITS.dealValue.sliderMax ? `${money(v)}+` : money(v)),
+    },
     {
       id: 'bookingRate',
-      label: 'Leads that book',
+      label: 'Lead > Book %',
       hint: 'Of every 100 leads, how many end up on the calendar?',
-      state: bookingRate, set: setBookingRate, fmt: asPct,
+      state: bookingRate, set: setBookingRate, fmt: asPct, suffix: '%',
     },
     {
       id: 'showRate',
-      label: 'Bookings that show',
+      label: 'Book > Show %',
       hint: 'Of those appointments, how many actually turn up?',
-      state: showRate, set: setShowRate, fmt: asPct,
+      state: showRate, set: setShowRate, fmt: asPct, suffix: '%',
     },
     {
       id: 'closeRate',
-      label: 'Shows that buy',
-      hint: 'Of the people who turn up, how many become customers?',
-      state: closeRate, set: setCloseRate, fmt: asPct,
+      label: 'Show > Close %',
+      hint: 'Of the people who show, how many buy?',
+      state: closeRate, set: setCloseRate, fmt: asPct, suffix: '%',
     },
   ]
 
@@ -95,8 +99,9 @@ export default function App() {
             raw={f.state}
             onChange={f.set}
             error={errors[f.id]}
+            suffix={f.suffix}
             format={f.fmt}
-            scaleLabel={f.fmt}
+            scaleLabel={f.scaleLabel || f.fmt}
           />
         ))}
 

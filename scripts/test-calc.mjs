@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /** Math guardrails. No dependencies: `node scripts/test-calc.mjs`. */
 import {
-  computeLeak, BOOKING_CEILING, defaultMultiplier, researchMax, validateField, liftBookingRate,
-  confidenceToMultiplier, defaultConfidence, posToValue, valueToPos, ROUNDERS, LIMITS, BANDS,
+  computeLeak, BOOKING_CEILING, defaultMultiplier, researchMax, validateField, liftBookingRate, trackMax,
+  confidenceToMultiplier, defaultConfidence, sliderSpec, clampToField, LIMITS, BANDS,
 } from '../src/lib/calc.js'
 
 let failed = 0
@@ -100,11 +100,35 @@ eq('accepts a normal funnel',
   ['leads', 'dealValue', 'bookingRate', 'showRate', 'closeRate'].map((k) => validateField(k, LIMITS[k].default)),
   [null, null, null, null, null])
 
-// Log sliders map cleanly at both ends.
+// A value typed above the track still validates; it just pins the thumb.
+eq('a $60k deal is valid even though the track stops at $25k', validateField('dealValue', 60000), null)
+truthy('the deal track really is shorter than validation', trackMax(LIMITS.dealValue) < LIMITS.dealValue.max)
+
+// Every slider stop has to be a value the field accepts, or the thumb sticks:
+// the handler clamps, the value stops changing, and React puts the thumb back.
 for (const key of Object.keys(LIMITS)) {
-  eq(`${key} slider bottom`, posToValue(0, LIMITS[key], ROUNDERS[key]), LIMITS[key].min)
-  eq(`${key} slider top`, posToValue(1000, LIMITS[key], ROUNDERS[key]), LIMITS[key].max)
-  truthy(`${key} round trips`, Math.abs(valueToPos(posToValue(500, LIMITS[key], ROUNDERS[key]), LIMITS[key]) - 500) < 25)
+  const { min, max, step } = sliderSpec(key, LIMITS[key])
+  eq(`${key} track ends exactly on the max`, (max - min) % step, 0)
+  truthy(`${key} track top is reachable`, max === trackMax(LIMITS[key]))
+
+  let stuck = 0
+  let clamped = 0
+  for (let v = min; v <= max; v += step) {
+    const settled = clampToField(v, LIMITS[key])
+    if (settled !== v) clamped++
+    // A stop is stuck when stepping off it lands back on the same value.
+    if (v > min && clampToField(v - step, LIMITS[key]) === settled) stuck++
+  }
+  eq(`${key} has no stuck stops above the floor`, stuck, 0)
+  truthy(`${key} clamps only below its first legal step`, clamped <= Math.ceil(LIMITS[key].min / step))
+}
+
+// Arrow keys have to move the number by one step, in both directions.
+for (const key of Object.keys(LIMITS)) {
+  const { min, max, step } = sliderSpec(key, LIMITS[key])
+  const mid = min + Math.floor((max - min) / step / 2) * step
+  eq(`${key}: one step up moves the value`, clampToField(mid + step, LIMITS[key]), mid + step)
+  eq(`${key}: one step down moves the value`, clampToField(mid - step, LIMITS[key]), mid - step)
 }
 
 console.log(failed ? `\n${failed} failing` : '\nall passing')

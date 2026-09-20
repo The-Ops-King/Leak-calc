@@ -5,8 +5,12 @@
  * inputs stored as custom fields. The GHL token only ever exists here.
  */
 
+import { buildBreakdownEmail } from '../lib/email.js'
+import { computeLeak, confidenceToMultiplier, BANDS } from '../src/lib/calc.js'
+
 const GHL_BASE = 'https://services.leadconnectorhq.com'
 const TAG = 'leak-calculator'
+const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 // HighLevel currently documents both of these for the Version header. We send
 // the first and retry once with the second if the API rejects the version.
@@ -37,10 +41,7 @@ const LIMITS = {
   calculated_leak_monthly: [0, 100000000],
 }
 
-const BANDS = new Set([
-  'under_1_min', '1_to_5_min', '5_to_30_min', '30_to_60_min',
-  'same_day', 'next_day', 'whenever',
-])
+const BAND_IDS = new Set(BANDS.map((b) => b.id))
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -172,7 +173,7 @@ export default async function handler(req, res) {
 
   if (!firstName) return res.status(400).json({ error: 'First name is required.' })
   if (!EMAIL.test(email)) return res.status(400).json({ error: 'That email address is not valid.' })
-  if (!BANDS.has(data.response_time_band)) {
+  if (!BAND_IDS.has(data.response_time_band)) {
     return res.status(400).json({ error: 'Unrecognised response time.' })
   }
 
@@ -222,5 +223,57 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'We could not save that. Try again in a moment.' })
   }
 
-  return res.status(200).json({ ok: true, missingFields: missing })
+  // The contact is safe. A failed send from here costs an email, not a lead.
+  const emailed = await sendBreakdown({ firstName, email, values })
+
+  return res.status(200).json({ ok: true, emailed, missingFields: missing })
+}
+
+/**
+ * Recomputed here rather than trusting the numbers the browser posted. The
+ * inputs are the visitor's; the arithmetic in an email going out under your
+ * name is not something a client should be able to set.
+ */
+async function sendBreakdown({ firstName, email, values }) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.MAIL_FROM
+  if (!key || !from) return false
+
+  const band = values.response_time_band
+  if (band === 'under_1_min') return false
+
+  try {
+    const funnel = computeLeak({
+      leads: values.leads_per_month,
+      dealValue: values.deal_value,
+      bookingRate: values.booking_rate,
+      showRate: values.show_rate,
+      closeRate: values.close_rate,
+      multiplier: confidenceToMultiplier(band, values.study_confidence),
+    })
+    if (funnel.aboveCeiling) return false
+
+    const { subject, html, text } = buildBreakdownEmail({
+      firstName,
+      deal: values.deal_value,
+      band: BANDS.find((b) => b.id === band)?.label || band,
+      target: band === '1_to_5_min' ? 'inside 1 minute' : 'inside 5 minutes',
+      funnel,
+    })
+
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [email], subject, html, text, reply_to: process.env.MAIL_REPLY_TO || undefined }),
+    })
+
+    if (!res.ok) {
+      console.error('Resend failed', res.status, (await res.text()).slice(0, 400))
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Breakdown email threw', err?.message)
+    return false
+  }
 }

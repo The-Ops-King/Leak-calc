@@ -25,7 +25,7 @@ export default function ConfidenceSlider({ band, confidence, onChange, basis }) 
               : 'Drag it to zero and the leak goes to zero with it.'}
           </span>
         </label>
-        <span className="field__value field__value--plain">{confidence}%</span>
+        <span className="field__value--plain">{confidence}%</span>
       </div>
 
       <input

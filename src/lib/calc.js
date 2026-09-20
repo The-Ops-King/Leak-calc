@@ -131,31 +131,36 @@ function stage(leads, bookingRate, showRate, closeRate, dealValue) {
   }
 }
 
+// A field can cap its slider below what the box accepts. Deal value stops the
+// track at $25k so the range most people live in gets real travel, while
+// someone with a $60k deal can still type it.
+export const trackMax = (limits) => limits.sliderMax ?? limits.max
+
+const STEPS = { leads: 100, dealValue: 500, bookingRate: 1, showRate: 1, closeRate: 1 }
+
 /**
- * Sliders run on a log scale. Leads and deal sizes cluster near the bottom of
- * their ranges, so a linear track wastes most of the thumb travel.
+ * The range input drives the real value directly: linear, native min/max/step,
+ * no position mapping.
+ *
+ * Mapping a 0-1000 position onto a value and then snapping that value to a
+ * step deadlocks a controlled input. One arrow press moves the position by
+ * less than a step, the value rounds back to where it was, React re-derives
+ * the position from the unchanged value, and the thumb never moves.
+ *
+ * The base is the field minimum when the range divides evenly by the step, so
+ * every stop is a legal value. When it does not divide (leads start at 1, step
+ * by 100) the base drops to zero and the handler clamps up, which costs a dead
+ * zone below the first step and nothing else.
  */
-export function posToValue(pos, { min, max }, round) {
-  const raw = Math.exp(Math.log(min) + (pos / 1000) * (Math.log(max) - Math.log(min)))
-  return round(raw, min, max)
+export function sliderSpec(key, limits) {
+  const step = STEPS[key]
+  const max = trackMax(limits)
+  const min = (max - limits.min) % step === 0 ? limits.min : 0
+  return { min, max, step }
 }
 
-export function valueToPos(value, { min, max }) {
-  const clamped = Math.min(Math.max(value, min), max)
-  return ((Math.log(clamped) - Math.log(min)) / (Math.log(max) - Math.log(min))) * 1000
-}
-
-const pctRounder = (n, min, max) => clamp(Math.round(n / (n < 10 ? 0.5 : 1)) * (n < 10 ? 0.5 : 1), min, max)
-
-export const ROUNDERS = {
-  leads: (n, min, max) => clamp(Math.round(n), min, max),
-  dealValue: (n, min, max) => {
-    const step = n < 1000 ? 50 : n < 10000 ? 100 : 500
-    return clamp(Math.round(n / step) * step, min, max)
-  },
-  bookingRate: pctRounder,
-  showRate: pctRounder,
-  closeRate: pctRounder,
+export function clampToField(value, limits) {
+  return clamp(value, limits.min, limits.max)
 }
 
 function clamp(n, min, max) {

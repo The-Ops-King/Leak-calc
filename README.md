@@ -8,6 +8,11 @@ creates a tagged contact in HighLevel with their whole funnel attached.
 The funnel is leads, then booking rate, then show rate, then close rate on
 shows. Revenue is `leads x booking x show x close x deal value`.
 
+Sliders are linear with coarse steps (100 leads, $500, 1%) and drive the value
+directly through the native `min`/`max`/`step`. Deal value stops its track at
+$25,000 via `sliderMax` so the range most people live in gets real travel, while
+the typed box still accepts up to $100,000.
+
 ## Why the number is believable
 
 The published research measures contact and qualification rates, not revenue.
@@ -103,6 +108,30 @@ Eight fields are created on the sub-account: `leads_per_month`, `deal_value`,
 `study_confidence` and `calculated_leak_monthly`. `close_rate` here means
 show-to-sale, not lead-to-sale.
 
+## The breakdown email
+
+`/api/submit` sends the breakdown through [Resend](https://resend.com) after the
+contact is upserted, never before, so a failed send costs an email rather than a
+lead. Set `RESEND_API_KEY` and `MAIL_FROM` (and optionally `MAIL_REPLY_TO`) in
+the Vercel project, with the sending domain verified in Resend.
+
+Leave those unset and nothing breaks: the contact is still created, and the
+confirmation screen says you will be in touch instead of claiming an email went
+out. The function returns `emailed: true|false` and the UI reads it, so the page
+never promises something that did not happen.
+
+The email carries their funnel both ways, the monthly and annual figures, and
+the three causes in `lib/email.js`. Numbers in it are recomputed server side
+from the submitted inputs rather than trusted from the browser, because the
+arithmetic in a message going out under your name should not be settable by the
+client. Nothing is sent to someone whose answer was "under 1 minute" or whose
+booking rate is already above the ceiling, since neither gets a number on the
+page either.
+
+It is deliberately a light email rather than matching the site's dark theme.
+Dark backgrounds get mangled by Outlook and by clients running their own dark
+mode, and a broken first email is worse than an off-brand one.
+
 ## Rate limiting
 
 `/api/submit` allows 5 submissions per IP per hour, counted in process. Vercel
@@ -123,16 +152,15 @@ Vercel, static build plus one Node function.
 | Framework | Vite |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Env vars | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID` |
+| Env vars | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID`, `RESEND_API_KEY`, `MAIL_FROM` |
 
 The token only ever exists in the function. Nothing about HighLevel reaches the
 client bundle.
 
 ## What is deliberately absent
 
-No PDF generator, no accounts, no dashboard, no wizard, no email sending. No
-localStorage and no analytics. The page stores nothing about the visitor on
-their device.
+No PDF generator, no accounts, no dashboard, no wizard. No localStorage and no
+analytics. The page stores nothing about the visitor on their device.
 
 ## Layout
 
@@ -142,7 +170,8 @@ src/lib/calc.js           the model and validation
 src/lib/format.js         currency, percent and lift formatting
 src/components/           sliders, result, lead form
 src/theme.css             brand tokens taken from jtylerray.com
-api/submit.js             the only thing that sees the GHL token
+api/submit.js             the only thing that sees the tokens
+lib/email.js              the breakdown email, and the three causes in it
 scripts/ghl-setup.mjs     one-off custom field creation and round trip check
 scripts/test-calc.mjs     math guardrails
 ```

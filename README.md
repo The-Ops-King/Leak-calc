@@ -174,6 +174,40 @@ leads.
 
 Leave the three variables unset and nothing breaks; the append is skipped.
 
+## Knowing when it breaks
+
+Every dependency here fails quietly. A dead OAuth token stops sheet rows, a
+revoked Resend key stops emails, a renamed GHL field silently drops the numbers,
+and in each case the visitor still sees their result and the function still
+returns 200. That is correct for the lead and terrible for the operator, so the
+pipeline reports on itself two ways.
+
+**On a degraded submission.** When a row, an email or a custom field fails, the
+contact is still saved and the response is still 200, but an alert email goes
+out naming what broke. Alerts are keyed by the failure rather than the lead and
+throttled to one an hour, because a dead credential otherwise fires on every
+submission and an inbox that gets muted is the same as no alerting.
+
+**On a schedule.** `GET /api/health` exercises all three credentials for real:
+it lists the GHL custom fields and checks all eight still exist, mints a Google
+access token and reads the sheet header to confirm it still matches the row the
+function writes, and asks Resend for a verified sending domain. It returns 200
+when everything passes and 503 when anything does not, so a failure is visible
+to Vercel's own cron notifications even when the broken thing is the mail
+provider the alert would have used.
+
+`vercel.json` runs it daily at 13:00 UTC. No secret is ever returned, only
+names, booleans and error text. Set `CRON_SECRET` and Vercel sends it
+automatically on cron invocations; without it the endpoint is an unauthenticated
+way to burn three API quotas per request. `MAIL_ALERT_TO` overrides where
+alerts go, defaulting to the address inside `MAIL_FROM`.
+
+Run it by hand any time:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://leak.jtylerray.com/api/health
+```
+
 ## Rate limiting
 
 `/api/submit` allows 5 submissions per IP per hour, counted in process. Vercel
@@ -227,6 +261,8 @@ src/lib/format.js         currency, percent and lift formatting
 src/components/           sliders, result, lead form
 src/theme.css             brand tokens taken from jtylerray.com
 api/submit.js             the only thing that sees the tokens
+api/health.js             daily credential check, alerts on failure
+lib/alert.js              operational alerts and their throttling
 lib/email.js              the breakdown email, the three causes, the hire-me block
 lib/google-auth.js        access tokens from either credential type
 lib/sheets.js             the Sheets append and its column order

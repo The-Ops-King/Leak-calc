@@ -7,6 +7,7 @@
 
 import { buildBreakdownEmail } from '../lib/email.js'
 import { appendRows, buildRow, sheetsConfigured } from '../lib/sheets.js'
+import { sendAlert, shouldAlert } from '../lib/alert.js'
 import { computeLeak, confidenceToMultiplier, BANDS } from '../src/lib/calc.js'
 
 const GHL_BASE = 'https://services.leadconnectorhq.com'
@@ -245,7 +246,39 @@ export default async function handler(req, res) {
   // submission is logged, including the ones that get no number on the page.
   const sheeted = await appendSubmission({ firstName, email, phone, values, label, funnel, emailed })
 
+  // A degraded submission still returns 200, because the lead is saved and the
+  // visitor has nothing to act on. But silent degradation is how a dead token
+  // goes unnoticed for weeks, so it gets reported.
+  reportDegraded({ emailed, sheeted, missing, band: values.response_time_band, email })
+
   return res.status(200).json({ ok: true, emailed, sheeted, missingFields: missing })
+}
+
+function reportDegraded({ emailed, sheeted, missing, band, email }) {
+  const problems = []
+  // No email is expected for these two: neither gets a number on the page.
+  const emailExpected = band !== 'under_1_min'
+  if (!emailed && emailExpected && process.env.RESEND_API_KEY) problems.push('The breakdown email did not send.')
+  if (!sheeted && sheetsConfigured()) problems.push('The Google Sheet row was not written.')
+  if (missing.length) problems.push(`GHL custom fields not found, so their numbers were dropped: ${missing.join(', ')}`)
+  if (!problems.length) return
+
+  // Keyed by what broke, not by who submitted, so one dead credential is one
+  // email rather than one per lead.
+  if (!shouldAlert(`submit:${problems.join('|')}`)) return
+
+  sendAlert({
+    subject: 'A submission was only partly saved',
+    lines: [
+      `A lead came in and the contact was created, but parts of the pipeline failed.`,
+      '',
+      ...problems.map((p) => `- ${p}`),
+      '',
+      `Lead: ${email}`,
+      '',
+      'Run /api/health for the full picture. Further alerts for this same failure are suppressed for an hour.',
+    ],
+  }).catch((e) => console.error('Degraded alert threw', e?.message))
 }
 
 async function appendSubmission(entry) {

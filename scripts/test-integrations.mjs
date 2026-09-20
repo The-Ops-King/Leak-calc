@@ -96,5 +96,20 @@ const nasty = buildBreakdownEmail({ firstName: '<script>alert(1)</script>', deal
 truthy('a name is escaped, not injected', !nasty.html.includes('<script>alert(1)</script>'))
 truthy('the escaped name still appears', nasty.html.includes('&lt;script&gt;'))
 
+// Alert throttling. Without it a dead credential emails on every submission,
+// the inbox gets muted, and muted alerting is the same as none.
+const { shouldAlert, alertRecipient } = await import('../lib/alert.js')
+const t0 = Date.now()
+eq('first alert for a key fires', shouldAlert('k1', t0), true)
+eq('same key inside the hour is suppressed', shouldAlert('k1', t0 + 59 * 60 * 1000), false)
+eq('same key after the hour fires again', shouldAlert('k1', t0 + 61 * 60 * 1000), true)
+eq('a different failure is not suppressed by the first', shouldAlert('k2', t0), true)
+
+// The alert has to reach a mailbox without another variable to forget.
+eq('explicit recipient wins', alertRecipient({ MAIL_ALERT_TO: 'ops@x.com', MAIL_FROM: 'Tyler <t@y.com>' }), 'ops@x.com')
+eq('falls back to the From address', alertRecipient({ MAIL_FROM: 'Tyler <t@y.com>' }), 't@y.com')
+eq('handles a bare From address', alertRecipient({ MAIL_FROM: 't@y.com' }), 't@y.com')
+eq('no mail config means no recipient', alertRecipient({}), null)
+
 console.log(failed ? `\n${failed} failing` : '\nall passing')
 process.exit(failed ? 1 : 0)

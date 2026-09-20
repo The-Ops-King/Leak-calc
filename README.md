@@ -46,7 +46,7 @@ sight, so this tool does none of that:
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # math guardrails, no dependencies
+npm test         # math and integration guardrails, no dependencies
 npm run build
 ```
 
@@ -132,6 +132,39 @@ It is deliberately a light email rather than matching the site's dark theme.
 Dark backgrounds get mangled by Outlook and by clients running their own dark
 mode, and a broken first email is worse than an off-brand one.
 
+## The Google Sheet
+
+Every submission also appends a row, so you have the raw data outside GHL. The
+function signs a service-account JWT with `node:crypto` and calls the Sheets API
+directly: no dependency, no third party between the form and the row, nothing to
+go down or run out of tasks.
+
+Setup:
+
+1. In Google Cloud, create a project, enable the **Google Sheets API**, create a
+   service account and download its JSON key.
+2. Share the sheet with the service account address as an **Editor**. Skipping
+   this is the usual cause of a 403.
+3. Set `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` and
+   `GOOGLE_SHEET_ID` in the Vercel project.
+4. Create the tab and header row, then prove the whole path works:
+
+   ```bash
+   export GOOGLE_SERVICE_ACCOUNT_EMAIL=... GOOGLE_SHEET_ID=...
+   export GOOGLE_PRIVATE_KEY="$(jq -r .private_key key.json)"
+   npm run sheet:setup -- --verify
+   ```
+
+The row is written last so it can record whether the email actually went out.
+Seventeen columns, listed in `COLUMNS` in `lib/sheets.js`. Access tokens are
+cached for the hour they are valid, so most submissions skip the token exchange.
+
+Every submission is logged, including the ones that get no number on the page
+("under 1 minute", or a booking rate already above the ceiling). Those are still
+leads.
+
+Leave the three variables unset and nothing breaks; the append is skipped.
+
 ## Rate limiting
 
 `/api/submit` allows 5 submissions per IP per hour, counted in process. Vercel
@@ -152,10 +185,24 @@ Vercel, static build plus one Node function.
 | Framework | Vite |
 | Build command | `npm run build` |
 | Output directory | `dist` |
-| Env vars | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID`, `RESEND_API_KEY`, `MAIL_FROM` |
+| Env vars | `GHL_PRIVATE_TOKEN`, `GHL_LOCATION_ID`, `RESEND_API_KEY`, `MAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_SHEET_ID` |
 
-The token only ever exists in the function. Nothing about HighLevel reaches the
-client bundle.
+Tokens only ever exist in the function. Nothing about HighLevel, Resend or
+Google reaches the client bundle.
+
+### DNS
+
+Resend's records for `jtylerray.com` are already published: a DKIM key at
+`resend._domainkey`, and the SES SPF include plus feedback MX on
+`send.jtylerray.com`.
+
+There is no `_dmarc` record. Gmail and Yahoo have required DMARC from bulk
+senders since February 2024, so without one these emails land in spam or get
+rejected. Minimum viable record:
+
+```
+_dmarc.jtylerray.com  TXT  "v=DMARC1; p=none; rua=mailto:jt@jtylerray.com"
+```
 
 ## What is deliberately absent
 
@@ -171,7 +218,10 @@ src/lib/format.js         currency, percent and lift formatting
 src/components/           sliders, result, lead form
 src/theme.css             brand tokens taken from jtylerray.com
 api/submit.js             the only thing that sees the tokens
-lib/email.js              the breakdown email, and the three causes in it
+lib/email.js              the breakdown email, the three causes, the hire-me block
+lib/sheets.js             service-account JWT and the Sheets append
 scripts/ghl-setup.mjs     one-off custom field creation and round trip check
+scripts/sheet-setup.mjs   tab and header creation, plus a round trip check
 scripts/test-calc.mjs     math guardrails
+scripts/test-integrations.mjs  JWT, row/header parity and email rendering
 ```

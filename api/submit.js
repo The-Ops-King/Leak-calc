@@ -6,6 +6,7 @@
  */
 
 import { buildBreakdownEmail } from '../lib/email.js'
+import { appendRows, buildRow, sheetsConfigured } from '../lib/sheets.js'
 import { computeLeak, confidenceToMultiplier, BANDS } from '../src/lib/calc.js'
 
 const GHL_BASE = 'https://services.leadconnectorhq.com'
@@ -223,48 +224,69 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'We could not save that. Try again in a moment.' })
   }
 
-  // The contact is safe. A failed send from here costs an email, not a lead.
-  const emailed = await sendBreakdown({ firstName, email, values })
+  // The contact is safe from here. The sheet row and the email are both best
+  // effort: either one failing costs a record or a message, never the lead.
+  const label = BANDS.find((b) => b.id === values.response_time_band)?.label || values.response_time_band
 
-  return res.status(200).json({ ok: true, emailed, missingFields: missing })
+  // Recomputed here rather than trusted from the browser. The arithmetic in a
+  // message going out under your name should not be settable by the client.
+  const funnel = computeLeak({
+    leads: values.leads_per_month,
+    dealValue: values.deal_value,
+    bookingRate: values.booking_rate,
+    showRate: values.show_rate,
+    closeRate: values.close_rate,
+    multiplier: confidenceToMultiplier(values.response_time_band, values.study_confidence),
+  })
+
+  const emailed = await sendBreakdown({ firstName, email, values, label, funnel })
+
+  // The row goes in last so it can record whether the email actually went. Every
+  // submission is logged, including the ones that get no number on the page.
+  const sheeted = await appendSubmission({ firstName, email, phone, values, label, funnel, emailed })
+
+  return res.status(200).json({ ok: true, emailed, sheeted, missingFields: missing })
 }
 
-/**
- * Recomputed here rather than trusting the numbers the browser posted. The
- * inputs are the visitor's; the arithmetic in an email going out under your
- * name is not something a client should be able to set.
- */
-async function sendBreakdown({ firstName, email, values }) {
+async function appendSubmission(entry) {
+  if (!sheetsConfigured()) return false
+  try {
+    await appendRows([buildRow(entry)])
+    return true
+  } catch (err) {
+    console.error('Sheet append failed:', err?.message)
+    return false
+  }
+}
+
+async function sendBreakdown({ firstName, email, values, label, funnel }) {
   const key = process.env.RESEND_API_KEY
   const from = process.env.MAIL_FROM
   if (!key || !from) return false
 
-  const band = values.response_time_band
-  if (band === 'under_1_min') return false
+  // Neither of these gets a number on the page, so neither gets one by email.
+  if (values.response_time_band === 'under_1_min' || funnel.aboveCeiling) return false
 
   try {
-    const funnel = computeLeak({
-      leads: values.leads_per_month,
-      dealValue: values.deal_value,
-      bookingRate: values.booking_rate,
-      showRate: values.show_rate,
-      closeRate: values.close_rate,
-      multiplier: confidenceToMultiplier(band, values.study_confidence),
-    })
-    if (funnel.aboveCeiling) return false
-
     const { subject, html, text } = buildBreakdownEmail({
       firstName,
       deal: values.deal_value,
-      band: BANDS.find((b) => b.id === band)?.label || band,
-      target: band === '1_to_5_min' ? 'inside 1 minute' : 'inside 5 minutes',
+      band: label,
+      target: values.response_time_band === '1_to_5_min' ? 'inside 1 minute' : 'inside 5 minutes',
       funnel,
     })
 
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [email], subject, html, text, reply_to: process.env.MAIL_REPLY_TO || undefined }),
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject,
+        html,
+        text,
+        reply_to: process.env.MAIL_REPLY_TO || undefined,
+      }),
     })
 
     if (!res.ok) {
@@ -273,7 +295,7 @@ async function sendBreakdown({ firstName, email, values }) {
     }
     return true
   } catch (err) {
-    console.error('Breakdown email threw', err?.message)
+    console.error('Breakdown email threw:', err?.message)
     return false
   }
 }

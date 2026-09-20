@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "ghl:setup": "node scripts/ghl-setup.mjs",
-    "test": "node scripts/test-calc.mjs"
+    "test": "node scripts/test-calc.mjs && node scripts/test-integrations.mjs",
+    "sheet:setup": "node scripts/sheet-setup.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

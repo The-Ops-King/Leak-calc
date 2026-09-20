@@ -14,6 +14,16 @@
 import { getAccessToken, googleAuthMode } from '../lib/google-auth.js'
 import { COLUMNS } from '../lib/sheets.js'
 import { sendAlert, shouldAlert, alertRecipient } from '../lib/alert.js'
+import { timingSafeEqual } from 'node:crypto'
+
+// Constant time, so the comparison cannot be used to guess the secret a byte
+// at a time. Length is compared first because timingSafeEqual throws on a
+// mismatch, and length is not the secret.
+function timingSafeEqualString(a, b) {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  return ab.length === bb.length && timingSafeEqual(ab, bb)
+}
 
 const GHL_BASE = 'https://services.leadconnectorhq.com'
 const FIELD_NAMES = [
@@ -27,10 +37,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'GET only.' })
   }
 
-  // Vercel Cron sends this automatically once CRON_SECRET exists. Without the
-  // guard the endpoint is a free way to burn three API quotas per request.
+  // Fails closed. An unset secret used to skip the check entirely, which meant
+  // a missing variable turned the endpoint into a free way for anyone to burn
+  // three API quotas per request, and looked identical to a working guard.
   const secret = process.env.CRON_SECRET
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret) {
+    console.error('CRON_SECRET is not set; refusing to run the health check.')
+    return res.status(503).json({ error: 'Health checks are not configured.' })
+  }
+  if (!timingSafeEqualString(req.headers.authorization || '', `Bearer ${secret}`)) {
     return res.status(401).json({ error: 'Unauthorized.' })
   }
 

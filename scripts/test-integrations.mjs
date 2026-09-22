@@ -129,5 +129,64 @@ eq('falls back to the From address', alertRecipient({ MAIL_FROM: 'Tyler <t@y.com
 eq('handles a bare From address', alertRecipient({ MAIL_FROM: 't@y.com' }), 't@y.com')
 eq('no mail config means no recipient', alertRecipient({}), null)
 
+// The HighLevel field list is the thing three files used to disagree about.
+const {
+  CUSTOM_FIELDS, FIELD_NAMES, indexCustomFields, missingFieldNames,
+  customFieldPayload, createCustomField, ghlConfigured,
+} = await import('../lib/ghl.js')
+
+eq('names are derived from the specs, so they cannot drift', FIELD_NAMES, CUSTOM_FIELDS.map((f) => f.name))
+eq('field names are unique', new Set(FIELD_NAMES).size, FIELD_NAMES.length)
+truthy('every field declares a type', CUSTOM_FIELDS.every((f) => f.dataType && f.placeholder))
+truthy('the sheet carries every GHL field', FIELD_NAMES.every((n) => COLUMNS.includes(n)))
+
+// HighLevel returns fieldKey prefixed with "contact.". Indexing both forms is
+// why renaming a field in the UI does not break the integration.
+const idx = indexCustomFields([
+  { id: 'i1', name: 'leads_per_month' },
+  { id: 'i2', fieldKey: 'contact.job_role' },
+  { id: 'i3', name: 'Deal_Value' },
+])
+eq('matches on name', idx.get('leads_per_month'), 'i1')
+eq('matches on prefixed fieldKey', idx.get('job_role'), 'i2')
+eq('matching ignores case', idx.get('deal_value'), 'i3')
+eq('the rest are reported missing', missingFieldNames(idx).length, FIELD_NAMES.length - 3)
+
+// Both value spellings, every time, or the value silently lands empty.
+const { customFields, missing } = customFieldPayload(idx, { leads_per_month: 60, job_role: 'Closer', deal_value: 0 })
+eq('only resolved fields are sent', customFields.length, 3)
+truthy('both spellings on every entry', customFields.every((c) => c.fieldValue === c.field_value && c.id))
+eq('a zero is sent, not dropped', customFields.find((c) => c.id === 'i3').fieldValue, '0')
+eq('unresolved fields are reported', missing.length, FIELD_NAMES.length - 3)
+eq('a null value becomes an empty string, not "null"',
+  customFieldPayload(idx, { leads_per_month: null }).customFields[0].fieldValue, '')
+
+// The setup route must not be usable to create arbitrary fields.
+let refused = false
+try { await createCustomField('loc', 'not_one_of_ours') } catch { refused = true }
+truthy('creating a field outside the list is refused', refused)
+
+eq('ghl off with no env', ghlConfigured({}), false)
+eq('ghl off with only a token', ghlConfigured({ GHL_PRIVATE_TOKEN: 't' }), false)
+eq('ghl on when complete', ghlConfigured({ GHL_PRIVATE_TOKEN: 't', GHL_LOCATION_ID: 'l' }), true)
+
+// The privileged routes share one guard, and it must fail closed.
+const { authorize } = await import('../lib/authorize.js')
+const fakeRes = () => { const r = { code: 0, body: null }; r.status = (c) => { r.code = c; return r }; r.json = (b) => { r.body = b; return r }; return r }
+const withSecret = (secret, header) => {
+  const prev = process.env.CRON_SECRET
+  if (secret === null) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = secret
+  const res = fakeRes()
+  const ok = authorize({ headers: header ? { authorization: header } : {} }, res)
+  if (prev === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prev
+  return { ok, code: res.code }
+}
+eq('no secret configured refuses rather than allowing', withSecret(null, 'Bearer anything'), { ok: false, code: 503 })
+eq('correct secret passes', withSecret('s3cret', 'Bearer s3cret'), { ok: true, code: 0 })
+eq('wrong secret is rejected', withSecret('s3cret', 'Bearer nope'), { ok: false, code: 401 })
+eq('missing header is rejected', withSecret('s3cret', null), { ok: false, code: 401 })
+eq('a prefix of the secret is rejected', withSecret('s3cret', 'Bearer s3cre'), { ok: false, code: 401 })
+eq('the bare secret without the scheme is rejected', withSecret('s3cret', 's3cret'), { ok: false, code: 401 })
+
 console.log(failed ? `\n${failed} failing` : '\nall passing')
 process.exit(failed ? 1 : 0)

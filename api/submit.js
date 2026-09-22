@@ -9,29 +9,9 @@ import { buildBreakdownEmail } from '../lib/email.js'
 import { appendRows, buildRow, sheetsConfigured } from '../lib/sheets.js'
 import { sendAlert, shouldAlert } from '../lib/alert.js'
 import { computeLeak, confidenceToMultiplier, BANDS } from '../src/lib/calc.js'
+import { ghl, TAG, listCustomFields, customFieldPayload } from '../lib/ghl.js'
 
-const GHL_BASE = 'https://services.leadconnectorhq.com'
-const TAG = 'leak-calculator'
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
-
-// HighLevel currently documents both of these for the Version header. We send
-// the first and retry once with the second if the API rejects the version.
-const PRIMARY_VERSION = process.env.GHL_API_VERSION || '2021-07-28'
-const FALLBACK_VERSION = PRIMARY_VERSION === 'v3' ? '2021-07-28' : 'v3'
-
-// Custom field names as they must appear in the sub-account. scripts/ghl-setup.mjs
-// creates any that are missing.
-const FIELD_NAMES = [
-  'leads_per_month',
-  'deal_value',
-  'booking_rate',
-  'show_rate',
-  'close_rate',
-  'response_time_band',
-  'study_confidence',
-  'job_role',
-  'calculated_leak_monthly',
-]
 
 // Mirrors config/multipliers.json. close_rate is show-to-sale, not lead-to-sale.
 const LIMITS = {
@@ -84,59 +64,23 @@ function rateLimited(ip) {
   return false
 }
 
-/* ------------------------------------------------------------------ *
- * Custom field lookup, cached per instance
- * ------------------------------------------------------------------ */
+// Field ids change rarely and the lookup costs a round trip, so it is cached
+// per warm instance. Ten minutes means a field created elsewhere is picked up
+// without a redeploy.
 const FIELD_TTL_MS = 10 * 60 * 1000
 let fieldCache = { at: 0, byName: null }
 
-async function ghl(path, { method = 'GET', body, version = PRIMARY_VERSION } = {}) {
-  const res = await fetch(`${GHL_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${process.env.GHL_PRIVATE_TOKEN}`,
-      Version: version,
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
-
-  const text = await res.text()
-  let json
-  try { json = JSON.parse(text) } catch { json = { raw: text } }
-
-  // Retry once on a version rejection, then give up.
-  if (!res.ok && version === PRIMARY_VERSION && looksLikeVersionError(res.status, text)) {
-    return ghl(path, { method, body, version: FALLBACK_VERSION })
-  }
-
-  return { ok: res.ok, status: res.status, json }
-}
-
-function looksLikeVersionError(status, text) {
-  if (status !== 400 && status !== 404 && status !== 422) return false
-  return /version/i.test(text)
-}
-
-async function customFieldsByName(locationId) {
+async function cachedCustomFields(locationId) {
   if (fieldCache.byName && Date.now() - fieldCache.at < FIELD_TTL_MS) return fieldCache.byName
-
-  const { ok, json } = await ghl(`/locations/${locationId}/customFields?model=contact`)
-  if (!ok || !Array.isArray(json.customFields)) return fieldCache.byName || new Map()
-
-  const byName = new Map()
-  for (const f of json.customFields) {
-    // fieldKey comes back prefixed ("contact.leads_per_month"); index both forms.
-    if (f.name) byName.set(String(f.name).toLowerCase(), f.id)
-    if (f.fieldKey) byName.set(String(f.fieldKey).replace(/^contact\./, '').toLowerCase(), f.id)
+  try {
+    const byName = await listCustomFields(locationId)
+    fieldCache = { at: Date.now(), byName }
+    return byName
+  } catch (err) {
+    console.error('Custom field lookup failed:', err.message)
+    return fieldCache.byName || new Map()
   }
-
-  fieldCache = { at: Date.now(), byName }
-  return byName
 }
-
-/* ------------------------------------------------------------------ */
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -193,22 +137,10 @@ export default async function handler(req, res) {
   values.response_time_band = data.response_time_band
   values.job_role = jobRole
 
-  const byName = await customFieldsByName(locationId)
-  const customFields = []
-  const missing = []
-  for (const name of FIELD_NAMES) {
-    const id = byName.get(name)
-    // HighLevel's docs show `fieldValue`, while a lot of live v2 traffic uses
-    // `field_value`. Both are sent so the value cannot land empty either way.
-    // `npm run ghl:setup -- --verify` does a round trip and reports which stuck.
-    if (id) {
-      const v = String(values[name])
-      customFields.push({ id, fieldValue: v, field_value: v })
-    }
-    else missing.push(name)
-  }
+  const byName = await cachedCustomFields(locationId)
+  const { customFields, missing } = customFieldPayload(byName, values)
   if (missing.length) {
-    // Never drop the lead over a missing field. Fix it with `npm run ghl:setup`.
+    // Never drop the lead over a missing field. POST /api/setup creates them.
     console.warn(`GHL custom fields not found, skipped: ${missing.join(', ')}`)
   }
 

@@ -14,17 +14,8 @@ const TOKEN = process.env.GHL_PRIVATE_TOKEN
 const LOCATION = process.env.GHL_LOCATION_ID
 const VERIFY = process.argv.includes('--verify')
 
-const FIELDS = [
-  { name: 'leads_per_month', dataType: 'NUMERICAL', placeholder: 'Leads per month' },
-  { name: 'deal_value', dataType: 'MONETORY', placeholder: 'Average deal value' },
-  { name: 'booking_rate', dataType: 'NUMERICAL', placeholder: 'Leads that book %' },
-  { name: 'show_rate', dataType: 'NUMERICAL', placeholder: 'Bookings that show %' },
-  { name: 'close_rate', dataType: 'NUMERICAL', placeholder: 'Shows that buy %' },
-  { name: 'response_time_band', dataType: 'TEXT', placeholder: 'Response time band' },
-  { name: 'study_confidence', dataType: 'NUMERICAL', placeholder: 'Study confidence %' },
-  { name: 'job_role', dataType: 'TEXT', placeholder: 'What they do' },
-  { name: 'calculated_leak_monthly', dataType: 'MONETORY', placeholder: 'Monthly leak' },
-]
+import { CUSTOM_FIELDS } from '../lib/ghl.js'
+const FIELDS = CUSTOM_FIELDS
 
 if (!TOKEN || !LOCATION) {
   console.error('Set GHL_PRIVATE_TOKEN and GHL_LOCATION_ID first.')

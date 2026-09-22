@@ -14,22 +14,8 @@
 import { getAccessToken, googleAuthMode } from '../lib/google-auth.js'
 import { COLUMNS } from '../lib/sheets.js'
 import { sendAlert, shouldAlert, alertRecipient } from '../lib/alert.js'
-import { timingSafeEqual } from 'node:crypto'
-
-// Constant time, so the comparison cannot be used to guess the secret a byte
-// at a time. Length is compared first because timingSafeEqual throws on a
-// mismatch, and length is not the secret.
-function timingSafeEqualString(a, b) {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  return ab.length === bb.length && timingSafeEqual(ab, bb)
-}
-
-const GHL_BASE = 'https://services.leadconnectorhq.com'
-const FIELD_NAMES = [
-  'leads_per_month', 'deal_value', 'booking_rate', 'show_rate',
-  'close_rate', 'response_time_band', 'study_confidence', 'calculated_leak_monthly', 'job_role',
-]
+import { authorize } from '../lib/authorize.js'
+import { listCustomFields, missingFieldNames, FIELD_NAMES, ghlConfigured } from '../lib/ghl.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -37,17 +23,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'GET only.' })
   }
 
-  // Fails closed. An unset secret used to skip the check entirely, which meant
-  // a missing variable turned the endpoint into a free way for anyone to burn
-  // three API quotas per request, and looked identical to a working guard.
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    console.error('CRON_SECRET is not set; refusing to run the health check.')
-    return res.status(503).json({ error: 'Health checks are not configured.' })
-  }
-  if (!timingSafeEqualString(req.headers.authorization || '', `Bearer ${secret}`)) {
-    return res.status(401).json({ error: 'Unauthorized.' })
-  }
+  if (!authorize(req, res)) return
 
   const checks = {}
   const record = async (name, fn) => {
@@ -59,23 +35,12 @@ export default async function handler(req, res) {
   }
 
   await record('ghl', async () => {
-    const { token, locationId } = { token: process.env.GHL_PRIVATE_TOKEN, locationId: process.env.GHL_LOCATION_ID }
-    if (!token || !locationId) throw new Error('GHL_PRIVATE_TOKEN or GHL_LOCATION_ID is not set.')
-
-    const r = await fetch(`${GHL_BASE}/locations/${locationId}/customFields?model=contact`, {
-      headers: { Authorization: `Bearer ${token}`, Version: process.env.GHL_API_VERSION || '2021-07-28', Accept: 'application/json' },
-    })
-    if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
-
-    const body = await r.json()
-    const present = new Set(
-      (body.customFields || []).flatMap((f) => [
-        String(f.name || '').toLowerCase(),
-        String(f.fieldKey || '').replace(/^contact\./, '').toLowerCase(),
-      ]),
-    )
-    const missing = FIELD_NAMES.filter((n) => !present.has(n))
-    if (missing.length) throw new Error(`Custom fields missing: ${missing.join(', ')}. Run: npm run ghl:setup`)
+    if (!ghlConfigured()) throw new Error('GHL_PRIVATE_TOKEN or GHL_LOCATION_ID is not set.')
+    const byName = await listCustomFields(process.env.GHL_LOCATION_ID)
+    const missing = missingFieldNames(byName)
+    if (missing.length) {
+      throw new Error(`Custom fields missing: ${missing.join(', ')}. POST /api/setup creates them.`)
+    }
     return { fields: FIELD_NAMES.length }
   })
 

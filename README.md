@@ -189,6 +189,31 @@ Escape, the backdrop and the button all close it, Tab is trapped inside while
 it is open, and body scroll is locked and restored. Those are not decoration: a
 modal a keyboard user can tab out of but not see is worse than no modal.
 
+## Provisioning without a terminal
+
+`POST /api/setup` creates whatever the submit path needs and nothing else: the
+HighLevel custom fields listed in `lib/ghl.js`, and the sheet header row. It
+exists because the alternative was a shell, and the person who owns this does
+not always have one.
+
+Scope is deliberately narrow. It creates only fields named on that list, never
+edits or deletes an existing field, and the only cell it writes is row one. It
+cannot be used as a general HighLevel or Sheets proxy even by someone holding
+the secret. It is idempotent, it creates fields serially because a burst
+against one location invites duplicates, and it reads back afterwards rather
+than trusting its own writes.
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://leak.jtylerray.com/api/setup
+```
+
+Same guard as the health check: `lib/authorize.js`, constant time, fails closed
+when `CRON_SECRET` is unset.
+
+Adding a field is now one entry in `CUSTOM_FIELDS` and a POST to that route.
+The submit path writes it, the health check notices it missing, and setup
+creates it, because all three read the same list.
+
 ## Knowing when it breaks
 
 Every dependency here fails quietly. A dead OAuth token stops sheet rows, a
@@ -277,6 +302,9 @@ src/components/           sliders, result, the gate form and the offer modal
 src/theme.css             brand tokens taken from jtylerray.com
 api/submit.js             the only thing that sees the tokens
 api/health.js             daily credential check, alerts on failure
+api/setup.js              creates the GHL fields and the sheet header
+lib/authorize.js          the shared guard for both privileged routes
+lib/ghl.js                the HighLevel client and the one field list
 lib/alert.js              operational alerts and their throttling
 lib/email.js              the breakdown email, the three causes, the hire-me block
 lib/google-auth.js        access tokens from either credential type

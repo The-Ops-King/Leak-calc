@@ -1,16 +1,27 @@
 import { useState } from 'react'
+import { JOB_ROLES } from '../lib/calc'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+const OTHER = 'Something else'
 
-export default function LeadForm({ payload }) {
+/**
+ * The gate. Nothing below the inputs renders until this succeeds, so the copy
+ * has to be worth the trade: they are handing over an address before they have
+ * seen anything. Saying plainly that the number appears on submit is the whole
+ * pitch.
+ */
+export default function LeadForm({ payload, onUnlock }) {
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [role, setRole] = useState('')
+  const [roleOther, setRoleOther] = useState('')
   const [trap, setTrap] = useState('') // honeypot; name avoids every autofill token
   const [state, setState] = useState('idle')
-  const [emailed, setEmailed] = useState(false)
   const [error, setError] = useState('')
   const [openedAt] = useState(() => Date.now())
+
+  const resolvedRole = role === OTHER ? roleOther.trim() : role
 
   async function submit(e) {
     e.preventDefault()
@@ -18,6 +29,8 @@ export default function LeadForm({ payload }) {
 
     if (!firstName.trim()) return setError('First name, please.')
     if (!EMAIL.test(email.trim())) return setError('That email address will not reach you.')
+    if (!role) return setError('Pick the closest thing to what you do.')
+    if (role === OTHER && !roleOther.trim()) return setError('Tell me what you do and I will send it over.')
 
     setState('sending')
     try {
@@ -28,6 +41,7 @@ export default function LeadForm({ payload }) {
           firstName: firstName.trim(),
           email: email.trim(),
           phone: phone.trim(),
+          job_role: resolvedRole,
           lc_ref: trap, // must stay empty
           elapsedMs: Date.now() - openedAt,
           ...payload,
@@ -35,33 +49,21 @@ export default function LeadForm({ payload }) {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Something went wrong on our end.')
-      setEmailed(Boolean(body.emailed))
-      setState('done')
+      onUnlock({ email: email.trim(), emailed: Boolean(body.emailed) })
     } catch (err) {
       setState('idle')
       setError(err.message)
     }
   }
 
-  if (state === 'done') {
-    return (
-      <section className="card">
-        <h2>{emailed ? 'Sent.' : 'Got it.'}</h2>
-        <p className="fine">
-          {emailed
-            ? `The breakdown is on its way to ${email}. If it is not there in a few minutes, check promotions.`
-            : `Your numbers are saved against ${email} and I will be in touch with the breakdown.`}
-        </p>
-      </section>
-    )
-  }
-
   return (
-    <section className="card">
-      <h2>Want the breakdown and the three things that usually cause this?</h2>
-      <p className="fine" style={{ marginBottom: 16 }}>
-        Drop your email. You already have the number, so this is only worth doing if you want to
-        know what to do about it.
+    <section className="card card--accent">
+      <p className="result__caption">One step left</p>
+      <h2 style={{ fontSize: 22, marginTop: 6 }}>Your number is ready</h2>
+      <p className="lede" style={{ fontSize: 16, marginBottom: 18 }}>
+        Tell me where to send it. The number and the full breakdown appear on this page the moment
+        you submit, and land in your inbox with the three things that usually cause a leak this
+        size.
       </p>
 
       <form onSubmit={submit} noValidate>
@@ -83,6 +85,33 @@ export default function LeadForm({ payload }) {
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
+
+          <select
+            className={`input${role ? '' : ' is-placeholder'}`}
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            aria-label="What do you do?"
+          >
+            <option value="" disabled>
+              What do you do?
+            </option>
+            {JOB_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+
+          {role === OTHER && (
+            <input
+              className="input"
+              placeholder="What do you do?"
+              value={roleOther}
+              onChange={(e) => setRoleOther(e.target.value)}
+              maxLength={60}
+            />
+          )}
+
           <input
             className="input"
             type="tel"
@@ -106,7 +135,7 @@ export default function LeadForm({ payload }) {
           </div>
 
           <button className="btn" type="submit" disabled={state === 'sending'}>
-            {state === 'sending' ? 'Sending' : 'Send me the breakdown'}
+            {state === 'sending' ? 'One second' : 'Show me my number'}
           </button>
         </div>
       </form>
@@ -116,6 +145,10 @@ export default function LeadForm({ payload }) {
           {error}
         </p>
       )}
+
+      <p className="fine" style={{ marginTop: 14 }}>
+        One email with your breakdown. No list, no sequence, no sharing your address with anyone.
+      </p>
     </section>
   )
 }

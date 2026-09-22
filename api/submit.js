@@ -29,6 +29,7 @@ const FIELD_NAMES = [
   'close_rate',
   'response_time_band',
   'study_confidence',
+  'job_role',
   'calculated_leak_monthly',
 ]
 
@@ -172,12 +173,14 @@ export default async function handler(req, res) {
   const firstName = String(data.firstName || '').trim().slice(0, 80)
   const email = String(data.email || '').trim().toLowerCase().slice(0, 254)
   const phone = String(data.phone || '').trim().slice(0, 40)
+  const jobRole = String(data.job_role || '').trim().slice(0, 60)
 
   if (!firstName) return res.status(400).json({ error: 'First name is required.' })
   if (!EMAIL.test(email)) return res.status(400).json({ error: 'That email address is not valid.' })
   if (!BAND_IDS.has(data.response_time_band)) {
     return res.status(400).json({ error: 'Unrecognised response time.' })
   }
+  if (!jobRole) return res.status(400).json({ error: 'Job role is required.' })
 
   const values = {}
   for (const [key, [min, max]] of Object.entries(LIMITS)) {
@@ -188,6 +191,7 @@ export default async function handler(req, res) {
     values[key] = v
   }
   values.response_time_band = data.response_time_band
+  values.job_role = jobRole
 
   const byName = await customFieldsByName(locationId)
   const customFields = []

@@ -22,6 +22,7 @@ const FIELDS = [
   { name: 'close_rate', dataType: 'NUMERICAL', placeholder: 'Shows that buy %' },
   { name: 'response_time_band', dataType: 'TEXT', placeholder: 'Response time band' },
   { name: 'study_confidence', dataType: 'NUMERICAL', placeholder: 'Study confidence %' },
+  { name: 'job_role', dataType: 'TEXT', placeholder: 'What they do' },
   { name: 'calculated_leak_monthly', dataType: 'MONETORY', placeholder: 'Monthly leak' },
 ]
 
@@ -105,7 +106,7 @@ async function main() {
 
   const email = `leak-calc-test+${Date.now()}@example.com`
   const customFields = Object.entries(ids).map(([name, id]) => {
-    const v = name === 'response_time_band' ? 'same_day' : '42'
+    const v = name === 'response_time_band' ? 'same_day' : name === 'job_role' ? 'Closer' : '42'
     return { id, fieldValue: v, field_value: v }
   })
 

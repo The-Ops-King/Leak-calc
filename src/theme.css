@@ -400,6 +400,10 @@ select:focus {
 
 .input::placeholder { color: var(--grey-dim); }
 
+/* A select showing its prompt should read like a placeholder, not a value. */
+select.input.is-placeholder { color: var(--grey-dim); }
+select.input option { color: var(--bone); background: var(--ink-deep); }
+
 .input:focus {
   outline: none;
   border-color: var(--accent);
@@ -481,6 +485,7 @@ a:hover { color: var(--bone); border-bottom-color: var(--bone); }
 }
 
 .funnel th {
+  padding-left: 10px;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -492,11 +497,13 @@ a:hover { color: var(--bone); border-bottom-color: var(--bone); }
   vertical-align: bottom;
 }
 
-.funnel th:first-child { text-align: left; }
+.funnel th:first-child { text-align: left; padding-left: 0; }
 .funnel th.is-improved { color: var(--accent-text); }
 
 .funnel td {
-  padding: 11px 0;
+  /* Left padding keeps the Now and improved columns from touching once the
+     values are wide, which they are as soon as revenue reaches six figures. */
+  padding: 11px 0 11px 10px;
   border-top: 1px solid var(--hair-soft);
   text-align: right;
   font-family: var(--mono);
@@ -507,6 +514,7 @@ a:hover { color: var(--bone); border-bottom-color: var(--bone); }
 
 .funnel td:first-child {
   text-align: left;
+  padding-left: 0;
   font-family: var(--sans);
   font-weight: 300;
   color: var(--grey-mid);

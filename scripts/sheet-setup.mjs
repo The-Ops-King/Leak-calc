@@ -80,7 +80,7 @@ async function main() {
   const TAB = NAMED_TAB || tabs[0]
   console.log(`Writing to:      ${TAB}${NAMED_TAB ? '' : '  (first sheet, no tab named in GOOGLE_SHEET_RANGE)'}`)
 
-  const existing = await api(`/values/${encodeURIComponent(`${TAB}!A1:Q1`)}`)
+  const existing = await api(`/values/${encodeURIComponent(`${TAB}!A1:R1`)}`)
   const header = existing.json?.values?.[0] || []
 
   if (header.length === 0) {
@@ -92,10 +92,16 @@ async function main() {
   } else if (header.join() === COLUMNS.join()) {
     console.log(`\nHeader row already correct (${header.length} columns).`)
   } else {
-    console.log('\nHeader row differs from what the function writes.')
-    console.log(`  sheet:    ${header.join(', ')}`)
-    console.log(`  expected: ${COLUMNS.join(', ')}`)
-    console.log('  Rows will still append in column order. Fix the header if you want them to line up.')
+    // Overwriting row 1 is safe and idempotent, and a stale header fails the
+    // health check, so repair it rather than reporting it.
+    console.log('\nHeader row is stale. Rewriting it.')
+    console.log(`  was:  ${header.join(', ')}`)
+    console.log(`  now:  ${COLUMNS.join(', ')}`)
+    const put = await api(
+      `/values/${encodeURIComponent(`${TAB}!A1`)}?valueInputOption=RAW`,
+      { method: 'PUT', body: JSON.stringify({ values: [COLUMNS] }) },
+    )
+    if (!put.ok) console.error(`  Header rewrite failed: ${JSON.stringify(put.json).slice(0, 300)}`)
   }
 
   if (!VERIFY) {
@@ -107,7 +113,7 @@ async function main() {
   console.log('\nAppending a test row.')
   await appendRows([row])
 
-  const back = await api(`/values/${encodeURIComponent(`${TAB}!A:Q`)}`)
+  const back = await api(`/values/${encodeURIComponent(`${TAB}!A:R`)}`)
   const rows = back.json?.values || []
   const last = rows[rows.length - 1] || []
   console.log(`Sheet now has ${rows.length} row(s) including the header.`)

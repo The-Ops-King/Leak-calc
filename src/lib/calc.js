@@ -3,6 +3,7 @@ import config from '../../config/multipliers.json' with { type: 'json' }
 export const BANDS = config.bands
 export const LIMITS = config.limits
 export const SOURCES = config.sources
+export const JOB_ROLES = config.job_roles
 export const BOOKING_CEILING = config.booking_rate_ceiling
 
 export function defaultMultiplier(bandId) {

@@ -61,6 +61,7 @@ eq('sheets off with an id but no credentials', sheetsConfigured({ GOOGLE_SHEET_I
 const values = {
   leads_per_month: 1000, deal_value: 5000, booking_rate: 25, show_rate: 60,
   close_rate: 25, response_time_band: 'same_day', study_confidence: 38,
+  job_role: 'Closer',
 }
 const funnel = computeLeak({
   leads: 1000, dealValue: 5000, bookingRate: 25, showRate: 60, closeRate: 25,
@@ -73,6 +74,12 @@ eq('email lands in the email column', row[COLUMNS.indexOf('email')], 'd@e.com')
 eq('leak lands in the leak column', row[COLUMNS.indexOf('calculated_leak_monthly')], funnel.leakMonthly)
 eq('annual lands in the annual column', row[COLUMNS.indexOf('calculated_leak_annual')], funnel.leakAnnual)
 eq('emailed flag is recorded', row[COLUMNS.indexOf('emailed')], 'yes')
+eq('job role lands in its column', row[COLUMNS.indexOf('job_role')], 'Closer')
+// Appending rather than inserting is what keeps rows written before this
+// column existed aligned with their headers.
+eq('job_role is the last column', COLUMNS[COLUMNS.length - 1], 'job_role')
+eq('a missing role becomes an empty cell',
+  buildRow({ firstName: 'D', email: 'd@e.com', phone: '', values: { ...values, job_role: undefined }, label: 'x', funnel, emailed: false })[COLUMNS.indexOf('job_role')], '')
 eq('a missing phone becomes an empty cell',
   buildRow({ firstName: 'D', email: 'd@e.com', phone: '', values, label: 'x', funnel, emailed: false })[COLUMNS.indexOf('phone')], '')
 truthy('no cell is undefined', row.every((c) => c !== undefined && c !== null))
@@ -95,6 +102,17 @@ for (const { id, label } of BANDS.filter((b) => b.id !== 'under_1_min')) {
 const nasty = buildBreakdownEmail({ firstName: '<script>alert(1)</script>', deal: 4000, band: 'Same day', target: 'inside 5 minutes', funnel })
 truthy('a name is escaped, not injected', !nasty.html.includes('<script>alert(1)</script>'))
 truthy('the escaped name still appears', nasty.html.includes('&lt;script&gt;'))
+
+// The gate offers a fixed set of roles; a free text answer still has to survive
+// the round trip into a cell.
+const { JOB_ROLES } = await import('../src/lib/calc.js')
+truthy('the role list has a free text escape hatch', JOB_ROLES.includes('Something else'))
+truthy('every role is a non-empty string', JOB_ROLES.every((r) => typeof r === 'string' && r.trim()))
+eq('roles are unique', new Set(JOB_ROLES).size, JOB_ROLES.length)
+for (const r of ['Closer', "VP of Rev Ops & 'Growth'", '<b>owner</b>']) {
+  eq(`role "${r.slice(0, 20)}" round trips into its cell`,
+    buildRow({ firstName: 'D', email: 'd@e.com', phone: '', values: { ...values, job_role: r }, label: 'x', funnel, emailed: true })[COLUMNS.indexOf('job_role')], r)
+}
 
 // Alert throttling. Without it a dead credential emails on every submission,
 // the inbox gets muted, and muted alerting is the same as none.

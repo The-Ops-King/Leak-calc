@@ -28,7 +28,7 @@ function timingSafeEqualString(a, b) {
 const GHL_BASE = 'https://services.leadconnectorhq.com'
 const FIELD_NAMES = [
   'leads_per_month', 'deal_value', 'booking_rate', 'show_rate',
-  'close_rate', 'response_time_band', 'study_confidence', 'calculated_leak_monthly',
+  'close_rate', 'response_time_band', 'study_confidence', 'calculated_leak_monthly', 'job_role',
 ]
 
 export default async function handler(req, res) {
@@ -87,7 +87,7 @@ export default async function handler(req, res) {
     const sheetId = process.env.GOOGLE_SHEET_ID
     if (!sheetId) throw new Error('GOOGLE_SHEET_ID is not set.')
     const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent('A1:Q1')}`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent('A1:R1')}`,
       { headers: { Authorization: `Bearer ${token}` } },
     )
     if (!r.ok) throw new Error(`Sheet read failed, HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)

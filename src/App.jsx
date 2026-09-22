@@ -20,6 +20,11 @@ export default function App() {
   const [band, setBand] = useState('same_day')
   const [confidence, setConfidence] = useState(() => defaultConfidence('same_day'))
 
+  // The gate. Held in memory only, so a refresh re-gates: the spec says nothing
+  // about this visitor is stored on their device, and an upsert makes a repeat
+  // submission harmless.
+  const [unlocked, setUnlocked] = useState(null)
+
   const errors = {
     leads: validateField('leads', leads),
     dealValue: validateField('dealValue', dealValue),
@@ -83,8 +88,8 @@ export default function App() {
       <p className="eyebrow">Response time / revenue leak</p>
       <h1>What answering slowly costs you every month</h1>
       <p className="lede">
-        Set your funnel. You get the number, the math behind it, and the studies it came from. No
-        email needed to see the result.
+        Set your funnel and I will show you what answering slowly costs you, the math behind it,
+        and the studies it came from.
       </p>
 
       <section className="card">
@@ -121,39 +126,61 @@ export default function App() {
         </div>
       </section>
 
-      {!isOptimal && (
-        <section className="card">
-          <ConfidenceSlider
-            band={band}
-            confidence={confidence}
-            onChange={setConfidence}
-            basis={basisFor(band)}
-          />
-        </section>
-      )}
+      {unlocked ? (
+        <>
+          {!isOptimal && (
+            <section className="card">
+              <ConfidenceSlider
+                band={band}
+                confidence={confidence}
+                onChange={setConfidence}
+                basis={basisFor(band)}
+              />
+            </section>
+          )}
 
-      {firstError ? (
+          {firstError ? (
+            <section className="card">
+              <h2>Cannot run that one</h2>
+              <p className="fine">{firstError}</p>
+            </section>
+          ) : (
+            <Result result={result} isOptimal={isOptimal} target={target} />
+          )}
+
+          <section className="card">
+            <h2>{unlocked.emailed ? 'Also on its way to your inbox' : 'Saved'}</h2>
+            <p className="fine">
+              {unlocked.emailed
+                ? `The written breakdown is heading to ${unlocked.email}. If it is not there in a few minutes, check promotions.`
+                : `Your numbers are saved against ${unlocked.email} and I will be in touch with the breakdown.`}
+            </p>
+          </section>
+        </>
+      ) : firstError ? (
         <section className="card">
           <h2>Cannot run that one</h2>
           <p className="fine">{firstError}</p>
+          <p className="fine" style={{ marginTop: 10 }}>
+            Fix that above and your number is one step away.
+          </p>
         </section>
       ) : (
-        <Result result={result} isOptimal={isOptimal} target={target} />
+        <LeadForm
+          onUnlock={setUnlocked}
+          payload={{
+            leads_per_month: n.leads,
+            deal_value: n.dealValue,
+            booking_rate: n.bookingRate,
+            show_rate: n.showRate,
+            close_rate: n.closeRate,
+            response_time_band: band,
+            response_time_label: BANDS.find((b) => b.id === band)?.label,
+            study_confidence: confidence,
+            calculated_leak_monthly: isOptimal || !result ? 0 : result.leakMonthly,
+          }}
+        />
       )}
-
-      <LeadForm
-        payload={{
-          leads_per_month: n.leads,
-          deal_value: n.dealValue,
-          booking_rate: n.bookingRate,
-          show_rate: n.showRate,
-          close_rate: n.closeRate,
-          response_time_band: band,
-          response_time_label: BANDS.find((b) => b.id === band)?.label,
-          study_confidence: confidence,
-          calculated_leak_monthly: isOptimal || !result ? 0 : result.leakMonthly,
-        }}
-      />
 
       <p className="foot">
         If you are looking for help building systems that make your sales process easier, get in

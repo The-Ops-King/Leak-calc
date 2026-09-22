@@ -98,5 +98,16 @@
     }
   },
   "booking_rate_ceiling": 80,
-  "_comment_ceiling": "Nobody books more than 80% of raw inbound leads. The lift is applied to booking rate only, because that is what the research measures: whether you reach and qualify the lead, not how well a rep closes once they are on the call."
+  "_comment_ceiling": "Nobody books more than 80% of raw inbound leads. The lift is applied to booking rate only, because that is what the research measures: whether you reach and qualify the lead, not how well a rep closes once they are on the call.",
+  "_comment_job_roles": "Shown in the gate form and written to the job_role custom field in HighLevel. 'Something else' reveals a free text box so the list stays short without losing anyone.",
+  "job_roles": [
+    "Founder / Owner",
+    "Offer owner",
+    "Sales manager",
+    "Closer",
+    "Appointment setter",
+    "Marketing",
+    "Operations / Admin",
+    "Something else"
+  ]
 }

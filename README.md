@@ -174,6 +174,21 @@ leads.
 
 Leave the three variables unset and nothing breaks; the append is skipped.
 
+## The offer modal
+
+`src/components/OfferModal.jsx` opens once, immediately after the form
+succeeds, and dismissing it reveals the result underneath. It is a pause rather
+than a toll: ignoring it costs the visitor nothing they were promised.
+
+It expects a square headshot at `public/tyler.jpg`. Without one it renders a
+monogram, so a missing file is a plainer modal rather than a broken image. Drop
+the file in and it is picked up on the next deploy; change `PHOTO` in that
+component for a different name or extension. 400x400 or larger, under ~150KB.
+
+Escape, the backdrop and the button all close it, Tab is trapped inside while
+it is open, and body scroll is locked and restored. Those are not decoration: a
+modal a keyboard user can tab out of but not see is worse than no modal.
+
 ## Knowing when it breaks
 
 Every dependency here fails quietly. A dead OAuth token stops sheet rows, a
@@ -258,7 +273,7 @@ analytics. The page stores nothing about the visitor on their device.
 config/multipliers.json   every tunable number
 src/lib/calc.js           the model and validation
 src/lib/format.js         currency, percent and lift formatting
-src/components/           sliders, result, lead form
+src/components/           sliders, result, the gate form and the offer modal
 src/theme.css             brand tokens taken from jtylerray.com
 api/submit.js             the only thing that sees the tokens
 api/health.js             daily credential check, alerts on failure

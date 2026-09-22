@@ -3,6 +3,7 @@ import Slider from './components/Slider'
 import ConfidenceSlider from './components/ConfidenceSlider'
 import Result from './components/Result'
 import LeadForm from './components/LeadForm'
+import OfferModal from './components/OfferModal'
 import {
   BANDS, LIMITS,
   computeLeak, confidenceToMultiplier, defaultConfidence, basisFor, validateField,
@@ -24,6 +25,9 @@ export default function App() {
   // about this visitor is stored on their device, and an upsert makes a repeat
   // submission harmless.
   const [unlocked, setUnlocked] = useState(null)
+  // Shown once on unlock. Dismissing it reveals the result underneath, so it
+  // never blocks what they already paid an email for.
+  const [showOffer, setShowOffer] = useState(false)
 
   const errors = {
     leads: validateField('leads', leads),
@@ -167,7 +171,10 @@ export default function App() {
         </section>
       ) : (
         <LeadForm
-          onUnlock={setUnlocked}
+          onUnlock={(u) => {
+            setUnlocked(u)
+            setShowOffer(true)
+          }}
           payload={{
             leads_per_month: n.leads,
             deal_value: n.dealValue,
@@ -181,6 +188,8 @@ export default function App() {
           }}
         />
       )}
+
+      {showOffer && <OfferModal onClose={() => setShowOffer(false)} />}
 
       <p className="foot">
         If you are looking for help building systems that make your sales process easier, get in

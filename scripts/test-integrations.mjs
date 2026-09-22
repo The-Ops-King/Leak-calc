@@ -114,6 +114,30 @@ for (const r of ['Closer', "VP of Rev Ops & 'Growth'", '<b>owner</b>']) {
     buildRow({ firstName: 'D', email: 'd@e.com', phone: '', values: { ...values, job_role: r }, label: 'x', funnel, emailed: true })[COLUMNS.indexOf('job_role')], r)
 }
 
+// A two-phase write must never lose what the first phase stored. The update
+// carries a funnel but no name, phone or role, and a blank there means "I do
+// not have this", not "clear it".
+const { mergeRow, parseRowRange } = await import('../lib/sheets.js')
+const captureRow = buildRow({ firstName: 'Dana', email: 'd@e.com', phone: '555', values: { job_role: 'Closer' }, funnel: null, emailed: false })
+const updateRowValues = buildRow({ firstName: '', email: 'd@e.com', phone: '', values: { ...values, job_role: undefined }, label: 'Same day', funnel, emailed: true })
+const merged = mergeRow(captureRow, updateRowValues)
+
+eq('the name survives the update', merged[COLUMNS.indexOf('first_name')], 'Dana')
+eq('the phone survives the update', merged[COLUMNS.indexOf('phone')], '555')
+eq('the role survives the update', merged[COLUMNS.indexOf('job_role')], 'Closer')
+eq('the funnel is written', merged[COLUMNS.indexOf('leads_per_month')], values.leads_per_month)
+eq('the leak is written', merged[COLUMNS.indexOf('calculated_leak_monthly')], funnel.leakMonthly)
+eq('the emailed flag is updated', merged[COLUMNS.indexOf('emailed')], 'yes')
+eq('the merged row keeps its width', merged.length, COLUMNS.length)
+eq('a zero overwrites rather than being treated as blank', mergeRow(['x'], [0])[0], 0)
+eq('an empty capture cell stays empty', merged[COLUMNS.indexOf('response_time_label')], 'Same day')
+
+// The client hands the row range back, so it is never trusted on shape alone.
+for (const bad of ['Tab!A1:R1', 'Tab!A2:R3', 'Tab!A:R', 'Tab!A2:Z2', '../etc', '', null]) {
+  eq(`row range rejected: ${JSON.stringify(bad)}`, parseRowRange(bad), null)
+}
+truthy('a real single row below the header is accepted', parseRowRange('Untitled!A6:R6')?.row === 6)
+
 // Alert throttling. Without it a dead credential emails on every submission,
 // the inbox gets muted, and muted alerting is the same as none.
 const { shouldAlert, alertRecipient } = await import('../lib/alert.js')

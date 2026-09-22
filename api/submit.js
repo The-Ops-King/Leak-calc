@@ -141,7 +141,10 @@ export default async function handler(req, res) {
 
   // Only an update carries a funnel, and it must carry a complete one: a
   // partially filled contact is worse than one that is plainly still empty.
-  let values = { job_role: jobRole }
+  // Only fields we actually hold. An update carries no role, and sending an
+  // empty one would clear the role the capture just stored.
+  const values = {}
+  if (jobRole) values.job_role = jobRole
   let funnel = null
   let label = ''
 

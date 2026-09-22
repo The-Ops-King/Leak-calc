@@ -10,7 +10,7 @@ const OTHER = 'Something else'
  * seen anything. Saying plainly that the number appears on submit is the whole
  * pitch.
  */
-export default function LeadForm({ payload, onUnlock }) {
+export default function LeadForm({ onUnlock }) {
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -38,18 +38,20 @@ export default function LeadForm({ payload, onUnlock }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          phase: 'capture',
           firstName: firstName.trim(),
           email: email.trim(),
           phone: phone.trim(),
           job_role: resolvedRole,
           lc_ref: trap, // must stay empty
           elapsedMs: Date.now() - openedAt,
-          ...payload,
         }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Something went wrong on our end.')
-      onUnlock({ email: email.trim(), emailed: Boolean(body.emailed) })
+      // rowRange lets the later update rewrite this visitor's row instead of
+      // appending a second one.
+      onUnlock({ email: email.trim().toLowerCase(), rowRange: body.rowRange || null })
     } catch (err) {
       setState('idle')
       setError(err.message)
@@ -58,12 +60,11 @@ export default function LeadForm({ payload, onUnlock }) {
 
   return (
     <section className="card card--accent">
-      <p className="result__caption">One step left</p>
-      <h2 style={{ fontSize: 22, marginTop: 6 }}>Your number is ready</h2>
+      <p className="result__caption">Takes about thirty seconds</p>
+      <h2 style={{ fontSize: 22, marginTop: 6 }}>Open the calculator</h2>
       <p className="lede" style={{ fontSize: 16, marginBottom: 18 }}>
-        Tell me where to send it. The number and the full breakdown appear on this page the moment
-        you submit, and land in your inbox with the three things that usually cause a leak this
-        size.
+        Five numbers about your funnel and how fast you answer a lead, and you will see what the
+        delay costs you every month, with the math and the studies behind it.
       </p>
 
       <form onSubmit={submit} noValidate>
@@ -135,7 +136,7 @@ export default function LeadForm({ payload, onUnlock }) {
           </div>
 
           <button className="btn" type="submit" disabled={state === 'sending'}>
-            {state === 'sending' ? 'One second' : 'Show me my number'}
+            {state === 'sending' ? 'One second' : 'Open the calculator'}
           </button>
         </div>
       </form>
@@ -147,7 +148,8 @@ export default function LeadForm({ payload, onUnlock }) {
       )}
 
       <p className="fine" style={{ marginTop: 14 }}>
-        One email with your breakdown. No list, no sequence, no sharing your address with anyone.
+        One email with your breakdown once you have run the numbers. No list, no sequence, no
+        sharing your address with anyone.
       </p>
     </section>
   )

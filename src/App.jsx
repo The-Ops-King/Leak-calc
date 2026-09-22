@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Slider from './components/Slider'
 import ConfidenceSlider from './components/ConfidenceSlider'
 import Result from './components/Result'
@@ -21,10 +21,11 @@ export default function App() {
   const [band, setBand] = useState('same_day')
   const [confidence, setConfidence] = useState(() => defaultConfidence('same_day'))
 
-  // The gate. Held in memory only, so a refresh re-gates: the spec says nothing
-  // about this visitor is stored on their device, and an upsert makes a repeat
-  // submission harmless.
+  // The gate. Held in memory only, so a refresh re-gates: nothing about this
+  // visitor is stored on their device, and an upsert makes a repeat submission
+  // harmless rather than a duplicate.
   const [unlocked, setUnlocked] = useState(null)
+  const [sent, setSent] = useState(false)
   // Shown once on unlock. Dismissing it reveals the result underneath, so it
   // never blocks what they already paid an email for.
   const [showOffer, setShowOffer] = useState(false)
@@ -54,6 +55,58 @@ export default function App() {
     () => (firstError ? null : computeLeak({ ...n, multiplier })),
     [firstError, n.leads, n.dealValue, n.bookingRate, n.showRate, n.closeRate, multiplier],
   )
+
+  // Phase two. The form created the contact with no funnel, because defaults
+  // are not answers. Once they actually change something, the same contact is
+  // upserted with their real numbers and their sheet row is rewritten in
+  // place. Debounced, so dragging a slider is one write and not forty.
+  const touched = useRef(false)
+  const rowRange = useRef(null)
+  const firstUpdate = useRef(true)
+
+  const funnelKey = [n.leads, n.dealValue, n.bookingRate, n.showRate, n.closeRate, band, confidence].join('|')
+  const initialKey = useRef(funnelKey)
+
+  useEffect(() => {
+    if (!unlocked || firstError) return
+    if (funnelKey === initialKey.current && !touched.current) return
+    touched.current = true
+
+    const timer = setTimeout(() => {
+      const wasFirst = firstUpdate.current
+      firstUpdate.current = false
+
+      fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phase: 'update',
+          email: unlocked.email,
+          rowRange: rowRange.current ?? unlocked.rowRange,
+          sendEmail: wasFirst,
+          leads_per_month: n.leads,
+          deal_value: n.dealValue,
+          booking_rate: n.bookingRate,
+          show_rate: n.showRate,
+          close_rate: n.closeRate,
+          response_time_band: band,
+          study_confidence: confidence,
+          calculated_leak_monthly: isOptimal || !result ? 0 : result.leakMonthly,
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((body) => {
+          if (!body) return
+          if (body.rowRange) rowRange.current = body.rowRange
+          if (body.emailed) setSent(true)
+        })
+        // A failed background save must never interrupt someone reading their
+        // number. The server alerts on it; the visitor does not need to know.
+        .catch(() => {})
+    }, 2500)
+
+    return () => clearTimeout(timer)
+  }, [unlocked, firstError, funnelKey])
 
   function pickBand(id) {
     setBand(id)
@@ -92,46 +145,53 @@ export default function App() {
       <p className="eyebrow">Response time / revenue leak</p>
       <h1>What answering slowly costs you every month</h1>
       <p className="lede">
-        Set your funnel and I will show you what answering slowly costs you, the math behind it,
-        and the studies it came from.
+        Most businesses lose more to slow replies than to bad leads. Find out what it costs you,
+        with the math and the studies behind it.
       </p>
 
-      <section className="card">
-        {fields.map((f) => (
-          <Slider
-            key={f.id}
-            id={f.id}
-            label={f.label}
-            hint={f.hint}
-            limits={LIMITS[f.id]}
-            value={n[f.id] || LIMITS[f.id].default}
-            raw={f.state}
-            onChange={f.set}
-            error={errors[f.id]}
-            suffix={f.suffix}
-            format={f.fmt}
-            scaleLabel={f.scaleLabel || f.fmt}
-          />
-        ))}
-
-        <div className="field">
-          <div className="field__top">
-            <label className="field__label" htmlFor="band">
-              How fast do you contact a new lead?
-            </label>
-          </div>
-          <select id="band" value={band} onChange={(e) => pickBand(e.target.value)}>
-            {BANDS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </section>
-
-      {unlocked ? (
+      {!unlocked ? (
+        <LeadForm
+          onUnlock={(u) => {
+            setUnlocked(u)
+            setShowOffer(true)
+          }}
+        />
+      ) : (
         <>
+          <section className="card">
+            {fields.map((f) => (
+              <Slider
+                key={f.id}
+                id={f.id}
+                label={f.label}
+                hint={f.hint}
+                limits={LIMITS[f.id]}
+                value={n[f.id] || LIMITS[f.id].default}
+                raw={f.state}
+                onChange={f.set}
+                error={errors[f.id]}
+                suffix={f.suffix}
+                format={f.fmt}
+                scaleLabel={f.scaleLabel || f.fmt}
+              />
+            ))}
+
+            <div className="field">
+              <div className="field__top">
+                <label className="field__label" htmlFor="band">
+                  How fast do you contact a new lead?
+                </label>
+              </div>
+              <select id="band" value={band} onChange={(e) => pickBand(e.target.value)}>
+                {BANDS.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </section>
+
           {!isOptimal && (
             <section className="card">
               <ConfidenceSlider
@@ -152,41 +212,16 @@ export default function App() {
             <Result result={result} isOptimal={isOptimal} target={target} />
           )}
 
-          <section className="card">
-            <h2>{unlocked.emailed ? 'Also on its way to your inbox' : 'Saved'}</h2>
-            <p className="fine">
-              {unlocked.emailed
-                ? `The written breakdown is heading to ${unlocked.email}. If it is not there in a few minutes, check promotions.`
-                : `Your numbers are saved against ${unlocked.email} and I will be in touch with the breakdown.`}
-            </p>
-          </section>
+          {sent && (
+            <section className="card">
+              <h2>Breakdown sent</h2>
+              <p className="fine">
+                It is on its way to {unlocked.email}. If it is not there in a few minutes, check
+                promotions. The numbers above stay live if you keep adjusting them.
+              </p>
+            </section>
+          )}
         </>
-      ) : firstError ? (
-        <section className="card">
-          <h2>Cannot run that one</h2>
-          <p className="fine">{firstError}</p>
-          <p className="fine" style={{ marginTop: 10 }}>
-            Fix that above and your number is one step away.
-          </p>
-        </section>
-      ) : (
-        <LeadForm
-          onUnlock={(u) => {
-            setUnlocked(u)
-            setShowOffer(true)
-          }}
-          payload={{
-            leads_per_month: n.leads,
-            deal_value: n.dealValue,
-            booking_rate: n.bookingRate,
-            show_rate: n.showRate,
-            close_rate: n.closeRate,
-            response_time_band: band,
-            response_time_label: BANDS.find((b) => b.id === band)?.label,
-            study_confidence: confidence,
-            calculated_leak_monthly: isOptimal || !result ? 0 : result.leakMonthly,
-          }}
-        />
       )}
 
       {showOffer && <OfferModal onClose={() => setShowOffer(false)} />}
